@@ -1,2 +1,0 @@
-[console_scripts]
-genmanip-client = genmanip_client.cli:main
