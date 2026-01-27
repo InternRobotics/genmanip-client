@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+src/genmanip_client/__init__.py
+src/genmanip_client/__main__.py
+src/genmanip_client/cli.py
+src/genmanip_client/eval_client.py
+src/genmanip_client/vis_utils.py
+src/genmanip_client.egg-info/PKG-INFO
+src/genmanip_client.egg-info/SOURCES.txt
+src/genmanip_client.egg-info/dependency_links.txt
+src/genmanip_client.egg-info/entry_points.txt
+src/genmanip_client.egg-info/requires.txt
+src/genmanip_client.egg-info/top_level.txt
