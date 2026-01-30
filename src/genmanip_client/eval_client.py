@@ -385,18 +385,18 @@ class EvalClient:
         self,
         base_url: str,
         worker_ids: list[str] = ["0"],
-        config: str = "",
         save_result: bool = True,
         fps: int = 30,
         cam_order: list[str] | None = None,
         robot_id: str | None = None,
         step_timeout: float = DEFAULT_STEP_TIMEOUT,
         reset_timeout: float = DEFAULT_RESET_TIMEOUT,
+        run_id: str = "",
     ):
         self.base_url = base_url.rstrip("/")
         self.step_timeout = step_timeout
         self.reset_timeout = reset_timeout
-
+        self.run_id = run_id
         self.log_dir = os.environ.get("GENMANIP_RESULT_DIR", "client_results")
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
         print("Saved dir:", self.log_dir)
@@ -406,12 +406,6 @@ class EvalClient:
 
         # Health check before operations
         self._health_check()
-
-        self.kill_workers()
-
-        if config:
-            print(f"loading config {config}")
-            self.load_config(config)
 
         self.save_result = save_result
         self._storage_worker: StorageWorker | None = None
@@ -432,8 +426,6 @@ class EvalClient:
                 cam_order=self.cam_order,
                 robot_id=self.robot_id,
             )
-
-        self._create_workers()
 
     def _health_check(self, timeout: float = DEFAULT_HEALTH_CHECK_TIMEOUT):
         """Check server connectivity before operations."""
@@ -595,10 +587,10 @@ class EvalClient:
                 f"HTTP error on kill_workers: {resp.status_code} - {detail}"
             )
 
-    def load_config(self, config_path: str):
+    def start_new_job(self, run_id: str, config_path: list[str]):
         resp = requests.post(
-            f"{self.base_url}/load_config",
-            json={"data": {"config_path": config_path}},
+            f"{self.base_url}/start_new_job",
+            json={"data": {"run_id": run_id, "config_path": config_path}},
             timeout=60,
         )
         if resp.status_code != 200:
@@ -607,7 +599,7 @@ class EvalClient:
             except Exception:
                 detail = resp.text
             raise RuntimeError(
-                f"HTTP error on load_config: {resp.status_code} - {detail}"
+                f"HTTP error on start_new_job: {resp.status_code} - {detail}"
             )
 
 
@@ -734,7 +726,6 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("-a", "--arm_type", type=str, default="franka")
     parser.add_argument("-g", "--gripper_type", type=str, default="panda_hand")
     parser.add_argument("-c", "--control_type", type=str, default="joint_position")
-    parser.add_argument("--config", type=str, default="")
     parser.add_argument(
         "--robot_id",
         type=str,
@@ -748,9 +739,11 @@ def build_argparser() -> argparse.ArgumentParser:
 def run_cli(args: argparse.Namespace) -> int:
     base_url = f"http://{args.host}:{args.port}"
     client = EvalClient(
-        base_url, args.worker_ids, config=args.config, robot_id=args.robot_id
+        base_url, args.worker_ids, robot_id=args.robot_id
     )
     print(f"Created workers {args.worker_ids} on server {base_url}.")
+
+    client._create_workers()
 
     try:
         _ = client.reset()
