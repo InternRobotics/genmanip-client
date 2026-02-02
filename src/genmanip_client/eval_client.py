@@ -728,6 +728,7 @@ def build_argparser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--master", action="store_true")
     parser.add_argument("--run_id", type=str, default="")
+    parser.add_argument("--url", type=str, default="http://0.0.0.0:8087")
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8087)
     parser.add_argument("--reset", action="store_true")
@@ -745,7 +746,11 @@ def build_argparser() -> argparse.ArgumentParser:
 
 
 def run_cli(args: argparse.Namespace) -> int:
-    base_url = f"http://{args.host}:{args.port}"
+    if args.url:
+        base_url = args.url
+    else:
+        base_url = f"http://{args.host}:{args.port}"
+        
     client = EvalClient(
         base_url, args.worker_ids, robot_id=args.robot_id
     )
@@ -753,8 +758,6 @@ def run_cli(args: argparse.Namespace) -> int:
 
     if args.master:
         client.start_new_job(run_id=args.run_id, config_path=args.config)
-
-    client._create_workers()
 
     try:
         _ = client.reset()
