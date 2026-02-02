@@ -720,6 +720,14 @@ def build_argparser() -> argparse.ArgumentParser:
         default=["0"],
         help="List of worker IDs, i.e. --worker_ids 0,1,2",
     )
+    parser.add_argument(
+        "-cfg", "--config",
+        type=lambda s: s.split(","),
+        default=None,
+        help="List of config paths, i.e. --config config1.yaml,config2.yaml",
+    )
+    parser.add_argument("--master", action="store_true")
+    parser.add_argument("--run_id", type=str, default="")
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8087)
     parser.add_argument("--reset", action="store_true")
@@ -742,6 +750,9 @@ def run_cli(args: argparse.Namespace) -> int:
         base_url, args.worker_ids, robot_id=args.robot_id
     )
     print(f"Created workers {args.worker_ids} on server {base_url}.")
+
+    if args.master:
+        client.start_new_job(run_id=args.run_id, config_path=args.config)
 
     client._create_workers()
 
