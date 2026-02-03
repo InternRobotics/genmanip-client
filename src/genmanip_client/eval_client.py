@@ -728,7 +728,7 @@ def build_argparser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--master", action="store_true")
     parser.add_argument("--run_id", type=str, default="")
-    parser.add_argument("--url", type=str, default="http://0.0.0.0:8087")
+    parser.add_argument("--url", type=str, default=None)
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8087)
     parser.add_argument("--reset", action="store_true")
