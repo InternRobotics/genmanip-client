@@ -445,6 +445,7 @@ class EvalClient:
     def close(self) -> None:
         """Close recorders."""
         self.close_recorders()
+        self.kill_workers()
 
     def close_recorders(self) -> None:
         """Close storage worker and wait for pending tasks to complete."""
@@ -783,7 +784,6 @@ def run_cli(args: argparse.Namespace) -> int:
             if worker_obs.get("reset"):
                 pass
     finally:
-        client.kill_workers()
         client.close()
         print("Client cleaned.")
     return 0
