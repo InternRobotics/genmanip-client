@@ -588,21 +588,6 @@ class EvalClient:
                 f"HTTP error on kill_workers: {resp.status_code} - {detail}"
             )
 
-    def start_new_job(self, run_id: str, config_path: list[str]):
-        resp = requests.post(
-            f"{self.base_url}/start_new_job",
-            json={"data": {"run_id": run_id, "config_path": config_path}},
-            timeout=60,
-        )
-        if resp.status_code != 200:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = resp.text
-            raise RuntimeError(
-                f"HTTP error on start_new_job: {resp.status_code} - {detail}"
-            )
-
 
 def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
     if arm_type == "franka":
@@ -756,9 +741,6 @@ def run_cli(args: argparse.Namespace) -> int:
         base_url, args.worker_ids, robot_id=args.robot_id
     )
     print(f"Created workers {args.worker_ids} on server {base_url}.")
-
-    if args.master:
-        client.start_new_job(run_id=args.run_id, config_path=args.config)
 
     try:
         _ = client.reset()
