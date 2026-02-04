@@ -681,8 +681,6 @@ class EvalClient:
 
         # Metrics
         for key, value in metrics.items():
-            if "*" in key:
-                continue
 
             # Format value
             if isinstance(value, float):
@@ -741,6 +739,7 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
                     "action": [0.0] * 9,
                     "base_motion": [0.0, 0.0, 0.0],
                     "control_type": "joint_position",
+                    "is_rel": True,
                 }
             elif control_type == "ee_pose":
                 actions = {
@@ -751,6 +750,7 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
                     ),
                     "base_motion": [0.0, 0.0, 0.0],
                     "control_type": "ee_pose",
+                    "is_rel": True,
                 }
             else:
                 raise ValueError("Invalid control type")
@@ -760,6 +760,7 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
                     "action": [0] * 13,
                     "base_motion": [0.0, 0.0, 0.0],
                     "control_type": "joint_position",
+                    "is_rel": True,
                 }
             elif control_type == "ee_pose":
                 actions = {
@@ -770,6 +771,7 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
                     ),
                     "base_motion": [0.0, 0.0, 0.0],
                     "control_type": "ee_pose",
+                    "is_rel": True,
                 }
             else:
                 raise ValueError("Invalid control type")
@@ -782,6 +784,7 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
                     "action": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.05, 0.05] * 2,
                     "base_motion": [0.0, 0.0, 0.0],
                     "control_type": "joint_position",
+                    "is_rel": True,
                 }
             elif control_type == "ee_pose":
                 actions = {
@@ -799,6 +802,7 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
                     ),
                     "base_motion": [0.0, 0.0, 0.0],
                     "control_type": "ee_pose",
+                    "is_rel": True,
                 }
             else:
                 raise ValueError("Invalid control type")
@@ -811,6 +815,7 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
                     "action": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.04, 0.04] * 2,
                     "base_motion": [0.0, 0.0, 0.0],
                     "control_type": "joint_position",
+                    "is_rel": True,
                 }
             elif control_type == "ee_pose":
                 actions = {
@@ -828,6 +833,7 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
                     ),
                     "base_motion": [0.0, 0.0, 0.0],
                     "control_type": "ee_pose",
+                    "is_rel": True,
                 }
             else:
                 raise ValueError("Invalid control type")

@@ -345,7 +345,7 @@ def run_submit(args: argparse.Namespace) -> int:
         else:
             # Starting a new run
             print_info(f"Previous job completed ({benchmark_id} / {previous_run_id})")
-            print_hint(f"To view results: {colored(f'gmp submit <config> --run-id {previous_run_id}', Colors.CYAN)}")
+            print_hint(f"To view results: {colored(f'gmp submit {benchmark_id} --run-id {previous_run_id}', Colors.CYAN)}")
             print()
 
     # Determine run_id
