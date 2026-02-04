@@ -5,6 +5,7 @@ import io
 import json
 import multiprocessing
 import os
+import sys
 from functools import wraps
 from pathlib import Path
 import pickle
@@ -17,6 +18,52 @@ import numpy as np
 import requests
 
 from .vis_utils import ROBOT_ACTION_CONFIGS, StreamingEpisodeRecorder
+
+
+# ANSI color codes
+class Colors:
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+    BRIGHT_GREEN = "\033[92m"
+    BRIGHT_YELLOW = "\033[93m"
+    BRIGHT_CYAN = "\033[96m"
+
+
+class Box:
+    TL = "╭"
+    TR = "╮"
+    BL = "╰"
+    BR = "╯"
+    H = "─"
+    V = "│"
+    LT = "├"
+    RT = "┤"
+
+
+def colored(text: str, *colors: str) -> str:
+    """Wrap text with ANSI color codes."""
+    if not sys.stdout.isatty():
+        return text
+    return "".join(colors) + text + Colors.RESET
+
+
+def print_info(message: str) -> None:
+    icon = colored("→", Colors.CYAN)
+    print(f"{icon} {message}")
+
+
+def print_success(message: str) -> None:
+    icon = colored("✓", Colors.BRIGHT_GREEN, Colors.BOLD)
+    print(f"{icon} {colored(message, Colors.BRIGHT_GREEN)}")
+
 
 # Timeout constants (in seconds)
 DEFAULT_STEP_TIMEOUT = 120  # 2 minutes
@@ -239,7 +286,9 @@ def _storage_worker_process(
             elif task_type == "episode_result":
                 save_episode_sr(task["episode_result"])
         except Exception as e:
-            print(f"[StorageWorker] Error processing task {task_type}: {e}")
+            print(
+                f"\033[31m✗\033[0m [StorageWorker] Error processing task {task_type}: {e}"
+            )
         finally:
             # Decrement pending counter
             with pending_counter.get_lock():
@@ -358,7 +407,9 @@ class StorageWorker:
         if self._process is not None:
             self._process.join(timeout=30.0)
             if self._process.is_alive():
-                print("[StorageWorker] Process did not exit in time, terminating...")
+                print(
+                    "\033[33m⚠\033[0m [StorageWorker] Process did not exit in time, terminating..."
+                )
                 self._process.terminate()
                 self._process.join(timeout=5.0)
 
@@ -392,14 +443,29 @@ class EvalClient:
         step_timeout: float = DEFAULT_STEP_TIMEOUT,
         reset_timeout: float = DEFAULT_RESET_TIMEOUT,
         run_id: str = "",
+        verbose: bool = True,
     ):
+        # Print startup banner
+        self.verbose = verbose
+        print(colored(f"{Box.TL}{Box.H * 46}{Box.TR}", Colors.CYAN))
+        print(
+            colored(Box.V, Colors.CYAN)
+            + "  "
+            + colored("GenManip Evaluation Client", Colors.BOLD, Colors.BRIGHT_CYAN)
+            + " " * 18
+            + " "
+            + colored(Box.V, Colors.CYAN)
+        )
+        print(colored(f"{Box.BL}{Box.H * 46}{Box.BR}", Colors.CYAN))
+        print()
+
         self.base_url = base_url.rstrip("/")
         self.step_timeout = step_timeout
         self.reset_timeout = reset_timeout
         self.run_id = run_id
         self.log_dir = os.environ.get("GENMANIP_RESULT_DIR", "client_results")
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
-        print("Saved dir:", self.log_dir)
+        print_info(f"Results directory: {colored(self.log_dir, Colors.CYAN)}")
 
         self.worker_ids = worker_ids
         self.robot_id = robot_id
@@ -427,6 +493,11 @@ class EvalClient:
                 robot_id=self.robot_id,
             )
 
+        self.step_count = 0
+        print_info(f"Connected to server: {colored(base_url, Colors.CYAN)}")
+        print_info(f"Workers: {colored(str(self.worker_ids), Colors.YELLOW)}")
+        print()
+
     def _health_check(self, timeout: float = DEFAULT_HEALTH_CHECK_TIMEOUT):
         """Check server connectivity before operations."""
         try:
@@ -446,6 +517,8 @@ class EvalClient:
         """Close recorders."""
         self.close_recorders()
         self.kill_workers()
+        print()
+        print_success(f"Client closed.")
 
     def close_recorders(self) -> None:
         """Close storage worker and wait for pending tasks to complete."""
@@ -515,9 +588,12 @@ class EvalClient:
 
         obs_dict = pickle.loads(resp.content)
         obs = deserialize_data(obs_dict)
+        print_info("Environment reset complete")
+        print()
         return obs
 
     def step(self, action_dict: dict) -> tuple[dict, bool]:
+        start = time.time()
         payload = pickle.dumps(action_dict, protocol=pickle.HIGHEST_PROTOCOL)
         try:
             resp = requests.post(
@@ -546,32 +622,100 @@ class EvalClient:
         if self.save_result:
             self._record(obs, action_dict)
             self._record_episode_results(obs)
+        step_time = time.time() - start
+        self.step_count += 1
+
+        # Progress indicator (update every 10 steps to reduce noise)
+        if self.verbose and self.step_count % 10 == 0:
+            time_color = (
+                Colors.BRIGHT_GREEN
+                if step_time < 0.1
+                else Colors.YELLOW if step_time < 0.5 else Colors.RED
+            )
+            print(
+                f"  {colored('⟳', Colors.DIM)} Step {colored(str(self.step_count), Colors.WHITE)}: "
+                f"{colored(f'{step_time:.3f}s', time_color)}"
+            )
         return obs, done
 
     def handle_done(self, data: dict):
         for wobs in data.values():
             if wobs["obs"] is not None and wobs["obs"]["reset"]:
-                print("=" * 20)
-                print("Evaluation result:")
-                for key, value in wobs["metric"].items():
-                    print(f"{key}: {value}")
-                print("=" * 20)
+                self._print_eval_result(wobs["metric"], title="Episode Result")
         if all(
             [data[worker_id]["metric"] is not None for worker_id in self.worker_ids]
         ) and all(data[worker_id]["obs"] is None for worker_id in self.worker_ids):
-            print("=" * 20)
-            print("Evaluation result:")
             result_dict = {}
             for worker_data in data.values():
                 for key, value in worker_data["metric"].items():
                     result_dict[key] = value
-            for key, value in result_dict.items():
-                if "*" in key:
-                    continue
-                print(f"{key}: {value}")
-            print("=" * 20)
+            # Filter out keys with "*"
+            filtered_results = {k: v for k, v in result_dict.items() if "*" not in k}
+            self._print_eval_result(filtered_results, title="Final Evaluation Result")
             return True
         return False
+
+    def _print_eval_result(
+        self, metrics: dict, title: str = "Evaluation Result"
+    ) -> None:
+        """Print formatted evaluation results."""
+        if not metrics:
+            return
+
+        width = 48
+        inner_width = width - 4
+
+        # Header
+        print(colored(f"{Box.TL}{Box.H * (width - 2)}{Box.TR}", Colors.MAGENTA))
+        title_pad = (inner_width - len(title)) // 2
+        print(
+            colored(Box.V, Colors.MAGENTA)
+            + " "
+            + " " * title_pad
+            + colored(title, Colors.BOLD, Colors.MAGENTA)
+            + " " * (inner_width - title_pad - len(title))
+            + " "
+            + colored(Box.V, Colors.MAGENTA)
+        )
+        print(colored(f"{Box.LT}{Box.H * (width - 2)}{Box.RT}", Colors.MAGENTA))
+
+        # Metrics
+        for key, value in metrics.items():
+            if "*" in key:
+                continue
+
+            # Format value
+            if isinstance(value, float):
+                if 0 <= value <= 1:
+                    # Likely a rate/ratio - show as percentage with color
+                    val_color = (
+                        Colors.BRIGHT_GREEN
+                        if value >= 0.8
+                        else Colors.YELLOW if value >= 0.5 else Colors.RED
+                    )
+                    val_str = colored(f"{value:.2%}", val_color, Colors.BOLD)
+                    val_len = 7
+                else:
+                    val_str = colored(f"{value:.4f}", Colors.WHITE)
+                    val_len = len(f"{value:.4f}")
+            else:
+                val_str = colored(str(value), Colors.WHITE)
+                val_len = len(str(value))
+
+            key_display = key[:25] + ".." if len(key) > 25 else key
+            key_len = min(len(key), 25) + (2 if len(key) > 25 else 0)
+            padding = inner_width - 2 - key_len - 2 - val_len
+            print(
+                colored(Box.V, Colors.MAGENTA)
+                + f"  {key_display}"
+                + " " * max(1, padding)
+                + f"  {val_str}"
+                + " "
+                + colored(Box.V, Colors.MAGENTA)
+            )
+
+        # Footer
+        print(colored(f"{Box.BL}{Box.H * (width - 2)}{Box.BR}", Colors.MAGENTA))
 
     def kill_workers(self):
         resp = requests.post(
@@ -707,7 +851,8 @@ def build_argparser() -> argparse.ArgumentParser:
         help="List of worker IDs, i.e. --worker_ids 0,1,2",
     )
     parser.add_argument(
-        "-cfg", "--config",
+        "-cfg",
+        "--config",
         type=lambda s: s.split(","),
         default=None,
         help="List of config paths, i.e. --config config1.yaml,config2.yaml",
@@ -736,11 +881,7 @@ def run_cli(args: argparse.Namespace) -> int:
         base_url = args.url
     else:
         base_url = f"http://{args.host}:{args.port}"
-        
-    client = EvalClient(
-        base_url, args.worker_ids, robot_id=args.robot_id
-    )
-    print(f"Created workers {args.worker_ids} on server {base_url}.")
+    client = EvalClient(base_url, args.worker_ids, robot_id=args.robot_id)
 
     try:
         _ = client.reset()
@@ -749,13 +890,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 i: fake_action(args.arm_type, args.gripper_type, args.control_type)
                 for i in args.worker_ids
             }
-
-            start = time.time()
             obs, done = client.step(action)
-            print(
-                f"workers {args.worker_ids} Step time: {time.time() - start:.4f} seconds"
-            )
-
             if done or obs is None:
                 break
             # Check if obs data is valid before accessing
@@ -767,5 +902,4 @@ def run_cli(args: argparse.Namespace) -> int:
                 pass
     finally:
         client.close()
-        print("Client cleaned.")
     return 0
