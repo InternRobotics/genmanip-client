@@ -126,11 +126,6 @@ def build_argparser() -> argparse.ArgumentParser:
         help="Run ID for this evaluation (auto-generated if not provided)",
     )
     parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Force restart even if a job is in progress or completed",
-    )
-    parser.add_argument(
         "--host",
         type=str,
         default="127.0.0.1",
@@ -167,57 +162,59 @@ def run_submit(args: argparse.Namespace) -> int:
     current_status = status.get("status", "idle")
     active_workers = status.get("active_workers", [])
     benchmark_id = status.get("benchmark_id")
-    run_id = status.get("run_id")
+    previous_run_id = status.get("run_id")
 
     # Handle different status scenarios
     if current_status == "running" and active_workers:
-        if not args.overwrite:
-            print(
-                f"Error: Job already in progress with workers {active_workers}.",
-                file=sys.stderr,
-            )
-            print(
-                f"  Benchmark: {benchmark_id}, Run ID: {run_id}",
-                file=sys.stderr,
-            )
-            print(
-                "Use --overwrite to force restart the job.",
-                file=sys.stderr,
-            )
-            return 1
-        print(f"Warning: Overwriting running job (workers: {active_workers})")
+        # Case 1: Workers are still active - must kill them first
+        print(
+            f"Error: Job is running with active workers: {active_workers}",
+            file=sys.stderr,
+        )
+        print(
+            f"  Benchmark: {benchmark_id}, Run ID: {previous_run_id}",
+            file=sys.stderr,
+        )
+        print(
+            "Please kill the workers first before submitting a new job.",
+            file=sys.stderr,
+        )
+        return 1
 
     elif current_status == "incomplete" and not active_workers:
-        if not args.overwrite and not args.run_id:
+        # Case 2: Previous job incomplete, no active workers
+        if args.run_id == previous_run_id:
+            # Resuming the same run
+            print(f"Resuming run: {previous_run_id}")
+        else:
+            # Starting a new run, warn about previous incomplete job
             print(
-                f"Previous job incomplete: {benchmark_id} / {run_id}",
-                file=sys.stderr,
+                f"Note: Previous job was incomplete ({benchmark_id} / {previous_run_id})"
             )
             print(
                 f"  Completed: {status.get('completed_episodes', 0)} / "
-                f"{status.get('total_episodes', 0)}",
-                file=sys.stderr,
+                f"{status.get('total_episodes', 0)}"
             )
-            print("Options:", file=sys.stderr)
+            print(f"  To resume previous run: gmp submit <config> --run-id {previous_run_id}")
             print(
-                f"  --run-id {run_id}  : Resume this run",
-                file=sys.stderr,
+                f"  To re-test the same run-id, manually clean saved/eval_results/{benchmark_id}/{previous_run_id}/"
             )
-            print("  --overwrite       : Start fresh", file=sys.stderr)
-            return 1
-        if args.run_id == run_id:
-            print(f"Resuming run: {run_id}")
+            print()
 
     elif current_status == "complete":
-        if not args.overwrite:
-            print("Previous job completed:")
+        # Case 3: Previous job completed
+        if args.run_id == previous_run_id:
+            # User wants to see previous results
+            print(f"Run '{previous_run_id}' already completed:")
             print_status(status)
-            print(
-                "\nUse --overwrite to restart the job.",
-                file=sys.stderr,
-            )
             return 0
-        print("Warning: Overwriting completed job")
+        else:
+            # Starting a new run
+            print(
+                f"Note: Previous job completed ({benchmark_id} / {previous_run_id})"
+            )
+            print(f"  To view previous results: gmp submit <config> --run-id {previous_run_id}")
+            print()
 
     # Determine run_id
     effective_run_id = args.run_id
