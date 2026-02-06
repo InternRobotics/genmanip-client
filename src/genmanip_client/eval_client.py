@@ -66,7 +66,7 @@ def print_success(message: str) -> None:
 
 
 # Timeout constants (in seconds)
-DEFAULT_STEP_TIMEOUT = 120  # 2 minutes
+DEFAULT_STEP_TIMEOUT = 600  # 10 minutes
 DEFAULT_RESET_TIMEOUT = 600  # 10 minutes
 DEFAULT_CREATE_TIMEOUT = 600  # 10 minutes
 DEFAULT_HEALTH_CHECK_TIMEOUT = 5.0
