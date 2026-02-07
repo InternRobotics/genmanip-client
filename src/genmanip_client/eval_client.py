@@ -883,7 +883,7 @@ def build_argparser() -> argparse.ArgumentParser:
 
 
 def run_cli(args: argparse.Namespace) -> int:
-    if args.url:
+    if hasattr(args, "url") and args.url:
         base_url = args.url
     else:
         base_url = f"http://{args.host}:{args.port}"
