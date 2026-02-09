@@ -19,11 +19,40 @@ pip install -e ".[full_numpy2]"
 
 ## Usage
 
+Primary CLI (recommended):
+
+```bash
+gmp --help
+```
+
 ```bash
 genmanip-client --host 127.0.0.1 --port 8087 --worker_ids 0,1
 ```
 
-### CLI Arguments
+### gmp Commands
+
+- `gmp submit <config_paths...>`: Submit evaluation jobs to the server.
+- `gmp eval`: Run the eval client (legacy behavior of `genmanip-client`).
+- `gmp status`: Get current job status from the server.
+- `gmp online create`: Create an online evaluation task.
+- `gmp online ready`: Check if an online evaluation task is ready.
+- `gmp online submit`: Create an online evaluation task and poll until ready.
+
+### gmp Examples
+
+```bash
+# Submit evaluation jobs
+gmp submit configs/tasks/xxx.yml --host 127.0.0.1 --port 8087
+
+# Run eval client
+gmp eval --worker_ids 0,1 --host 127.0.0.1 --port 8087
+
+# Online evaluation: create and wait for endpoint, then eval
+GMP_ONLINE_URL=$(gmp online submit --base-url https://example.com --token YOUR_TOKEN --task-id T2025123100001 --print-endpoint)
+gmp eval --url "$GMP_ONLINE_URL" --token YOUR_TOKEN
+```
+
+### genmanip-client (legacy) Arguments
 
 - `--worker_ids`: Comma-separated worker IDs to attach to (default: `0`). Example: `--worker_ids 0,1,2`.
 - `-cfg`, `--config`: Comma-separated config paths for `start_new_job` (default: `None`). Example: `--config configs/tasks/ebench/long/microwave.yml,configs/tasks/ebench/long/dishwasher.yml`.

@@ -444,6 +444,7 @@ class EvalClient:
         reset_timeout: float = DEFAULT_RESET_TIMEOUT,
         run_id: str = "",
         verbose: bool = True,
+        token: str | None = None,
     ):
         # Print startup banner
         self.verbose = verbose
@@ -469,6 +470,9 @@ class EvalClient:
 
         self.worker_ids = worker_ids
         self.robot_id = robot_id
+        self._auth_headers: dict[str, str] = {}
+        if token:
+            self._auth_headers = {"Authorization": f"Bearer {token}"}
 
         # Health check before operations
         self._health_check()
@@ -501,7 +505,11 @@ class EvalClient:
     def _health_check(self, timeout: float = DEFAULT_HEALTH_CHECK_TIMEOUT):
         """Check server connectivity before operations."""
         try:
-            resp = requests.get(f"{self.base_url}/docs", timeout=timeout)
+            resp = requests.get(
+                f"{self.base_url}/docs",
+                timeout=timeout,
+                headers=self._build_headers(),
+            )
             if resp.status_code != 200:
                 raise RuntimeError(
                     f"Server health check failed with status {resp.status_code}"
@@ -513,6 +521,12 @@ class EvalClient:
             ) from e
 
     # ================= Lifecycle =================
+    def _build_headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        headers = dict(self._auth_headers)
+        if extra:
+            headers.update(extra)
+        return headers
+
     def close(self) -> None:
         """Close recorders."""
         self.close_recorders()
@@ -549,6 +563,7 @@ class EvalClient:
                 f"{self.base_url}/create_workers",
                 json={"data": {"worker_ids": self.worker_ids}},
                 timeout=DEFAULT_CREATE_TIMEOUT,
+                headers=self._build_headers(),
             )
         except requests.Timeout:
             raise RuntimeError(
@@ -571,7 +586,9 @@ class EvalClient:
             resp = requests.post(
                 f"{self.base_url}/reset",
                 data=payload,
-                headers={"Content-Type": "application/octet-stream"},
+                headers=self._build_headers(
+                    {"Content-Type": "application/octet-stream"}
+                ),
                 timeout=self.reset_timeout,
             )
         except requests.Timeout:
@@ -599,7 +616,9 @@ class EvalClient:
             resp = requests.post(
                 f"{self.base_url}/step",
                 data=payload,
-                headers={"Content-Type": "application/octet-stream"},
+                headers=self._build_headers(
+                    {"Content-Type": "application/octet-stream"}
+                ),
                 timeout=self.step_timeout,
             )
         except requests.Timeout:
@@ -720,6 +739,7 @@ class EvalClient:
             f"{self.base_url}/kill",
             json={"data": {"worker_ids": self.worker_ids}},
             timeout=60,
+            headers=self._build_headers(),
         )
         if resp.status_code != 200:
             try:
@@ -873,6 +893,12 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("-g", "--gripper_type", type=str, default="panda_hand")
     parser.add_argument("-c", "--control_type", type=str, default="joint_position")
     parser.add_argument(
+        "--token",
+        type=str,
+        default=None,
+        help="API token for authenticated eval servers",
+    )
+    parser.add_argument(
         "--robot_id",
         type=str,
         default=None,
@@ -887,7 +913,12 @@ def run_cli(args: argparse.Namespace) -> int:
         base_url = args.url
     else:
         base_url = f"http://{args.host}:{args.port}"
-    client = EvalClient(base_url, args.worker_ids, robot_id=args.robot_id)
+    client = EvalClient(
+        base_url,
+        args.worker_ids,
+        robot_id=args.robot_id,
+        token=args.token,
+    )
 
     try:
         _ = client.reset()

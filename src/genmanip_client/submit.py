@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from datetime import datetime
 
@@ -48,10 +49,17 @@ def colored(text: str, *colors: str) -> str:
     return "".join(colors) + text + Colors.RESET
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _visible_len(text: str) -> int:
+    return len(_ANSI_RE.sub("", text))
+
+
 def make_box_line(content: str, width: int, left: str = Box.V, right: str = Box.V) -> str:
-    """Create a box line with content padded to width."""
-    padding = width - len(content)
-    return f"{left} {content}{' ' * padding} {right}"
+    """Create a box line with content padded to width (ANSI-aware)."""
+    padding = width - _visible_len(content)
+    return f"{left} {content}{' ' * max(0, padding)} {right}"
 
 
 def make_progress_bar(completed: int, total: int, width: int = 20) -> str:
@@ -161,19 +169,45 @@ def print_status(status: dict) -> None:
     print(colored(f"{Box.TL}{Box.H * (width - 2)}{Box.TR}", Colors.CYAN))
     title = "GenManip Evaluation Status"
     title_pad = (inner_width - len(title)) // 2
-    print(colored(Box.V, Colors.CYAN) + " " + " " * title_pad + colored(title, Colors.BOLD, Colors.BRIGHT_CYAN) + " " * (inner_width - title_pad - len(title)) + " " + colored(Box.V, Colors.CYAN))
+    title_line = (
+        " " * title_pad
+        + colored(title, Colors.BOLD, Colors.BRIGHT_CYAN)
+        + " " * (inner_width - title_pad - len(title))
+    )
+    print(colored(make_box_line(title_line, inner_width), Colors.CYAN))
     print(colored(f"{Box.LT}{Box.H * (width - 2)}{Box.RT}", Colors.CYAN))
 
     # Status info
     status_display = colored(f"{icon} {status_val.upper()}", Colors.BOLD, color)
-    print(colored(Box.V, Colors.CYAN) + f"  {'Status:':<14} {status_display}" + " " * (inner_width - 15 - len(status_val) - 3) + " " + colored(Box.V, Colors.CYAN))
+    print(
+        colored(
+            make_box_line(f" {'Status:':<14} {status_display}", inner_width),
+            Colors.CYAN,
+        )
+    )
 
     benchmark = status.get("benchmark_id", "N/A") or "N/A"
-    print(colored(Box.V, Colors.CYAN) + f"  {'Benchmark:':<14} {colored(benchmark, Colors.WHITE)}" + " " * (inner_width - 15 - len(str(benchmark))) + " " + colored(Box.V, Colors.CYAN))
+    print(
+        colored(
+            make_box_line(
+                f" {'Benchmark:':<14} {colored(benchmark, Colors.WHITE)}",
+                inner_width,
+            ),
+            Colors.CYAN,
+        )
+    )
 
     run_id = status.get("run_id", "N/A") or "N/A"
     run_id_display = str(run_id)[:30] + "..." if len(str(run_id)) > 30 else str(run_id)
-    print(colored(Box.V, Colors.CYAN) + f"  {'Run ID:':<14} {colored(run_id_display, Colors.DIM)}" + " " * (inner_width - 15 - len(run_id_display)) + " " + colored(Box.V, Colors.CYAN))
+    print(
+        colored(
+            make_box_line(
+                f" {'Run ID:':<14} {colored(run_id_display, Colors.DIM)}",
+                inner_width,
+            ),
+            Colors.CYAN,
+        )
+    )
 
     # Separator
     print(colored(f"{Box.LT}{Box.H * (width - 2)}{Box.RT}", Colors.CYAN))
@@ -185,16 +219,43 @@ def print_status(status: dict) -> None:
 
     progress_bar = make_progress_bar(completed, total)
     progress_text = f"{completed}/{total}"
-    print(colored(Box.V, Colors.CYAN) + f"  {'Progress:':<14} {colored(progress_bar, Colors.GREEN)}" + " " * (inner_width - 15 - 28) + " " + colored(Box.V, Colors.CYAN))
-    print(colored(Box.V, Colors.CYAN) + f"  {'Completed:':<14} {colored(str(completed), Colors.BRIGHT_GREEN)}" + " " * (inner_width - 15 - len(str(completed))) + " " + colored(Box.V, Colors.CYAN))
-    print(colored(Box.V, Colors.CYAN) + f"  {'In Progress:':<14} {colored(str(in_progress), Colors.YELLOW)}" + " " * (inner_width - 15 - len(str(in_progress))) + " " + colored(Box.V, Colors.CYAN))
+    print(
+        colored(
+            make_box_line(
+                f" {'Progress:':<14} {colored(progress_bar, Colors.GREEN)}",
+                inner_width,
+            ),
+            Colors.CYAN,
+        )
+    )
+    print(
+        colored(
+            make_box_line(
+                f" {'Completed:':<14} {colored(str(completed), Colors.BRIGHT_GREEN)}",
+                inner_width,
+            ),
+            Colors.CYAN,
+        )
+    )
+    print(
+        colored(
+            make_box_line(
+                f" {'In Progress:':<14} {colored(str(in_progress), Colors.YELLOW)}",
+                inner_width,
+            ),
+            Colors.CYAN,
+        )
+    )
 
     workers = status.get("active_workers", [])
     workers_str = ", ".join(map(str, workers)) if workers else colored("none", Colors.DIM)
     workers_display = workers_str[:25] + "..." if len(workers_str) > 25 else workers_str
-    raw_len = len(", ".join(map(str, workers))) if workers else 4
-    display_len = min(raw_len, 25) + (3 if raw_len > 25 else 0)
-    print(colored(Box.V, Colors.CYAN) + f"  {'Workers:':<14} {workers_display}" + " " * (inner_width - 15 - display_len) + " " + colored(Box.V, Colors.CYAN))
+    print(
+        colored(
+            make_box_line(f" {'Workers:':<14} {workers_display}", inner_width),
+            Colors.CYAN,
+        )
+    )
 
     # Results section
     results = status.get("results", {})
@@ -202,8 +263,13 @@ def print_status(status: dict) -> None:
 
     if results:
         results_title = "Results (Success Rate)"
-        print(colored(Box.V, Colors.CYAN) + f"  {colored(results_title, Colors.BOLD)}" + " " * (inner_width - 1 - len(results_title)) + " " + colored(Box.V, Colors.CYAN))
-        print(colored(Box.V, Colors.CYAN) + " " * (inner_width + 2) + " " + colored(Box.V, Colors.CYAN))
+        print(
+            colored(
+                make_box_line(f" {colored(results_title, Colors.BOLD)}", inner_width),
+                Colors.CYAN,
+            )
+        )
+        print(colored(make_box_line(" " * inner_width, inner_width), Colors.CYAN))
         for task_name, sr in sorted(results.items()):
             sr_color = Colors.BRIGHT_GREEN if sr >= 0.8 else Colors.YELLOW if sr >= 0.5 else Colors.RED
             sr_bar_width = 15
@@ -211,14 +277,18 @@ def print_status(status: dict) -> None:
             sr_bar = colored("▓" * sr_filled, sr_color) + colored("░" * (sr_bar_width - sr_filled), Colors.DIM)
             task_display = task_name[:20] + ".." if len(task_name) > 20 else task_name
             sr_str = f"{sr:.2%}"
-            line_content = f"  {task_display:<22} {sr_bar} {colored(sr_str, sr_color, Colors.BOLD)}"
-            # Calculate raw length for padding
-            raw_task_len = min(len(task_name), 20) + (2 if len(task_name) > 20 else 0)
-            pad = inner_width - 2 - 22 - sr_bar_width - 1 - 7
-            print(colored(Box.V, Colors.CYAN) + line_content + " " * max(0, pad) + " " + colored(Box.V, Colors.CYAN))
+            line_content = (
+                f" {task_display:<22} {sr_bar} {colored(sr_str, sr_color, Colors.BOLD)}"
+            )
+            print(colored(make_box_line(line_content, inner_width), Colors.CYAN))
     else:
         no_results = "No results yet"
-        print(colored(Box.V, Colors.CYAN) + f"  {colored(no_results, Colors.DIM)}" + " " * (inner_width - 1 - len(no_results)) + " " + colored(Box.V, Colors.CYAN))
+        print(
+            colored(
+                make_box_line(f" {colored(no_results, Colors.DIM)}", inner_width),
+                Colors.CYAN,
+            )
+        )
 
     # Footer
     print(colored(f"{Box.BL}{Box.H * (width - 2)}{Box.BR}", Colors.CYAN))
