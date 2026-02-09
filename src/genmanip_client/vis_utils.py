@@ -108,6 +108,8 @@ class StreamingEpisodeRecorder:
         cam_order: list[str] | None = None,
         title: str = "Action",
         robot_id: str | None = None,
+        frame_save_interval: int = 30,
+        frame_dir_name: str = "images",
     ):
         self.out_dir = out_dir
         self.fps = fps
@@ -116,12 +118,15 @@ class StreamingEpisodeRecorder:
         self.cam_order = cam_order or []
         self.title = title
         self.robot_id = robot_id
+        self.frame_save_interval = frame_save_interval
+        self.frame_dir_name = frame_dir_name
         self._robot_config: RobotActionConfig | None = (
             get_robot_action_config(robot_id) if robot_id else None
         )
 
         self._writer: cv2.VideoWriter | None = None
         self._episode_dir: str | None = None
+        self._frame_dir: str | None = None
         self._t = 0
         self._actions: list[list[float]] = []
         self._action_dim: int | None = None
@@ -163,6 +168,8 @@ class StreamingEpisodeRecorder:
         self._current_episode = episode_id
         self._episode_dir = os.path.join(self.out_dir, episode_id)
         Path(self._episode_dir).mkdir(parents=True, exist_ok=True)
+        self._frame_dir = os.path.join(self._episode_dir, self.frame_dir_name)
+        Path(self._frame_dir).mkdir(parents=True, exist_ok=True)
 
         final_h = top_h + self.plot_height
         final_w = top_w
@@ -377,6 +384,14 @@ class StreamingEpisodeRecorder:
             raise RuntimeError("VideoWriter not initialized (unexpected).")
         self._writer.write(final_bgr)
 
+        if (
+            self.frame_save_interval > 0
+            and (self._t + 1) % self.frame_save_interval == 0
+            and self._frame_dir is not None
+        ):
+            frame_path = os.path.join(self._frame_dir, f"frame_{self._t + 1:06d}.png")
+            cv2.imwrite(frame_path, final_bgr)
+
         self._t += 1
 
     def close(self):
@@ -389,4 +404,5 @@ class StreamingEpisodeRecorder:
         self._frame_w = None
         self._frame_h = None
         self._episode_dir = None
+        self._frame_dir = None
         self._current_episode = None

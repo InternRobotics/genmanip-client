@@ -12,6 +12,7 @@ import pickle
 import tempfile
 import time
 from typing import Any
+import re
 
 from importlib import import_module
 import numpy as np
@@ -53,6 +54,27 @@ def colored(text: str, *colors: str) -> str:
     if not sys.stdout.isatty():
         return text
     return "".join(colors) + text + Colors.RESET
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _visible_len(text: str) -> int:
+    return len(_ANSI_RE.sub("", text))
+
+
+def make_box_line(
+    content: str,
+    width: int,
+    left: str = Box.V,
+    right: str = Box.V,
+    border_color: str | None = None,
+) -> str:
+    """Create a box line with content padded to width (ANSI-aware)."""
+    padding = width - _visible_len(content)
+    left_border = colored(left, border_color) if border_color else left
+    right_border = colored(right, border_color) if border_color else right
+    return f"{left_border} {content}{' ' * max(0, padding)} {right_border}"
 
 
 def print_info(message: str) -> None:
@@ -448,16 +470,23 @@ class EvalClient:
     ):
         # Print startup banner
         self.verbose = verbose
-        print(colored(f"{Box.TL}{Box.H * 46}{Box.TR}", Colors.CYAN))
-        print(
-            colored(Box.V, Colors.CYAN)
-            + "  "
-            + colored("GenManip Evaluation Client", Colors.BOLD, Colors.BRIGHT_CYAN)
-            + " " * 18
-            + " "
-            + colored(Box.V, Colors.CYAN)
+        inner_width = 46
+        print(colored(f"{Box.TL}{Box.H * (inner_width+2)}{Box.TR}", Colors.CYAN))
+        title = "GenManip Evaluation Client"
+        title_pad = max(0, (inner_width - len(title)) // 2)
+        title_line = (
+            " " * title_pad
+            + colored(title, Colors.BOLD, Colors.BRIGHT_CYAN)
+            + " " * (inner_width - title_pad - len(title))
         )
-        print(colored(f"{Box.BL}{Box.H * 46}{Box.BR}", Colors.CYAN))
+        print(
+            make_box_line(
+                title_line,
+                inner_width,
+                border_color=Colors.CYAN,
+            )
+        )
+        print(colored(f"{Box.BL}{Box.H * (inner_width+2)}{Box.BR}", Colors.CYAN))
         print()
 
         self.base_url = base_url.rstrip("/")
@@ -687,15 +716,12 @@ class EvalClient:
         # Header
         print(colored(f"{Box.TL}{Box.H * (width - 2)}{Box.TR}", Colors.MAGENTA))
         title_pad = (inner_width - len(title)) // 2
-        print(
-            colored(Box.V, Colors.MAGENTA)
-            + " "
-            + " " * title_pad
+        title_line = (
+            " " * title_pad
             + colored(title, Colors.BOLD, Colors.MAGENTA)
             + " " * (inner_width - title_pad - len(title))
-            + " "
-            + colored(Box.V, Colors.MAGENTA)
         )
+        print(make_box_line(title_line, inner_width, border_color=Colors.MAGENTA))
         print(colored(f"{Box.LT}{Box.H * (width - 2)}{Box.RT}", Colors.MAGENTA))
 
         # Metrics
@@ -722,13 +748,9 @@ class EvalClient:
             key_display = key[:25] + ".." if len(key) > 25 else key
             key_len = min(len(key), 25) + (2 if len(key) > 25 else 0)
             padding = inner_width - 2 - key_len - 2 - val_len
+            line_content = f" {key_display}" + " " * max(1, padding) + f"  {val_str}"
             print(
-                colored(Box.V, Colors.MAGENTA)
-                + f"  {key_display}"
-                + " " * max(1, padding)
-                + f"  {val_str}"
-                + " "
-                + colored(Box.V, Colors.MAGENTA)
+                make_box_line(line_content, inner_width, border_color=Colors.MAGENTA)
             )
 
         # Footer

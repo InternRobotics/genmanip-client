@@ -56,10 +56,18 @@ def _visible_len(text: str) -> int:
     return len(_ANSI_RE.sub("", text))
 
 
-def make_box_line(content: str, width: int, left: str = Box.V, right: str = Box.V) -> str:
+def make_box_line(
+    content: str,
+    width: int,
+    left: str = Box.V,
+    right: str = Box.V,
+    border_color: str | None = None,
+) -> str:
     """Create a box line with content padded to width (ANSI-aware)."""
     padding = width - _visible_len(content)
-    return f"{left} {content}{' ' * max(0, padding)} {right}"
+    left_border = colored(left, border_color) if border_color else left
+    right_border = colored(right, border_color) if border_color else right
+    return f"{left_border} {content}{' ' * max(0, padding)} {right_border}"
 
 
 def make_progress_bar(completed: int, total: int, width: int = 20) -> str:
@@ -174,38 +182,35 @@ def print_status(status: dict) -> None:
         + colored(title, Colors.BOLD, Colors.BRIGHT_CYAN)
         + " " * (inner_width - title_pad - len(title))
     )
-    print(colored(make_box_line(title_line, inner_width), Colors.CYAN))
+    print(make_box_line(title_line, inner_width, border_color=Colors.CYAN))
     print(colored(f"{Box.LT}{Box.H * (width - 2)}{Box.RT}", Colors.CYAN))
 
     # Status info
     status_display = colored(f"{icon} {status_val.upper()}", Colors.BOLD, color)
     print(
-        colored(
-            make_box_line(f" {'Status:':<14} {status_display}", inner_width),
-            Colors.CYAN,
+        make_box_line(
+            f" {'Status:':<14} {status_display}",
+            inner_width,
+            border_color=Colors.CYAN,
         )
     )
 
     benchmark = status.get("benchmark_id", "N/A") or "N/A"
     print(
-        colored(
-            make_box_line(
-                f" {'Benchmark:':<14} {colored(benchmark, Colors.WHITE)}",
-                inner_width,
-            ),
-            Colors.CYAN,
+        make_box_line(
+            f" {'Benchmark:':<14} {colored(benchmark, Colors.WHITE)}",
+            inner_width,
+            border_color=Colors.CYAN,
         )
     )
 
     run_id = status.get("run_id", "N/A") or "N/A"
     run_id_display = str(run_id)[:30] + "..." if len(str(run_id)) > 30 else str(run_id)
     print(
-        colored(
-            make_box_line(
-                f" {'Run ID:':<14} {colored(run_id_display, Colors.DIM)}",
-                inner_width,
-            ),
-            Colors.CYAN,
+        make_box_line(
+            f" {'Run ID:':<14} {colored(run_id_display, Colors.DIM)}",
+            inner_width,
+            border_color=Colors.CYAN,
         )
     )
 
@@ -220,30 +225,24 @@ def print_status(status: dict) -> None:
     progress_bar = make_progress_bar(completed, total)
     progress_text = f"{completed}/{total}"
     print(
-        colored(
-            make_box_line(
-                f" {'Progress:':<14} {colored(progress_bar, Colors.GREEN)}",
-                inner_width,
-            ),
-            Colors.CYAN,
+        make_box_line(
+            f" {'Progress:':<14} {colored(progress_bar, Colors.GREEN)}",
+            inner_width,
+            border_color=Colors.CYAN,
         )
     )
     print(
-        colored(
-            make_box_line(
-                f" {'Completed:':<14} {colored(str(completed), Colors.BRIGHT_GREEN)}",
-                inner_width,
-            ),
-            Colors.CYAN,
+        make_box_line(
+            f" {'Completed:':<14} {colored(str(completed), Colors.BRIGHT_GREEN)}",
+            inner_width,
+            border_color=Colors.CYAN,
         )
     )
     print(
-        colored(
-            make_box_line(
-                f" {'In Progress:':<14} {colored(str(in_progress), Colors.YELLOW)}",
-                inner_width,
-            ),
-            Colors.CYAN,
+        make_box_line(
+            f" {'In Progress:':<14} {colored(str(in_progress), Colors.YELLOW)}",
+            inner_width,
+            border_color=Colors.CYAN,
         )
     )
 
@@ -251,9 +250,10 @@ def print_status(status: dict) -> None:
     workers_str = ", ".join(map(str, workers)) if workers else colored("none", Colors.DIM)
     workers_display = workers_str[:25] + "..." if len(workers_str) > 25 else workers_str
     print(
-        colored(
-            make_box_line(f" {'Workers:':<14} {workers_display}", inner_width),
-            Colors.CYAN,
+        make_box_line(
+            f" {'Workers:':<14} {workers_display}",
+            inner_width,
+            border_color=Colors.CYAN,
         )
     )
 
@@ -264,12 +264,13 @@ def print_status(status: dict) -> None:
     if results:
         results_title = "Results (Success Rate)"
         print(
-            colored(
-                make_box_line(f" {colored(results_title, Colors.BOLD)}", inner_width),
-                Colors.CYAN,
+            make_box_line(
+                f" {colored(results_title, Colors.BOLD)}",
+                inner_width,
+                border_color=Colors.CYAN,
             )
         )
-        print(colored(make_box_line(" " * inner_width, inner_width), Colors.CYAN))
+        print(make_box_line(" " * inner_width, inner_width, border_color=Colors.CYAN))
         for task_name, sr in sorted(results.items()):
             sr_color = Colors.BRIGHT_GREEN if sr >= 0.8 else Colors.YELLOW if sr >= 0.5 else Colors.RED
             sr_bar_width = 15
@@ -280,13 +281,14 @@ def print_status(status: dict) -> None:
             line_content = (
                 f" {task_display:<22} {sr_bar} {colored(sr_str, sr_color, Colors.BOLD)}"
             )
-            print(colored(make_box_line(line_content, inner_width), Colors.CYAN))
+            print(make_box_line(line_content, inner_width, border_color=Colors.CYAN))
     else:
         no_results = "No results yet"
         print(
-            colored(
-                make_box_line(f" {colored(no_results, Colors.DIM)}", inner_width),
-                Colors.CYAN,
+            make_box_line(
+                f" {colored(no_results, Colors.DIM)}",
+                inner_width,
+                border_color=Colors.CYAN,
             )
         )
 
