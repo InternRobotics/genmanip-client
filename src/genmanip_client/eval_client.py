@@ -601,7 +601,7 @@ class EvalClient:
         try:
             server = ThreadingHTTPServer(("0.0.0.0", self._web_view_port), _Handler)
         except OSError as exc:
-            print_i(f"Web viewer disabled (port {self._web_view_port} unavailable): {exc}")
+            print_info(f"Web viewer disabled (port {self._web_view_port} unavailable): {exc}")
             self._web_view = False
             return
         server._frame_lock = self._web_frame_lock  # type: ignore[attr-defined]
