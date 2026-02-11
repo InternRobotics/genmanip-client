@@ -193,8 +193,9 @@ class StreamingEpisodeRecorder:
         self._current_episode = episode_id
         self._episode_dir = os.path.join(self.out_dir, episode_id)
         Path(self._episode_dir).mkdir(parents=True, exist_ok=True)
-        self._frame_dir = os.path.join(self._episode_dir, self.frame_dir_name)
-        Path(self._frame_dir).mkdir(parents=True, exist_ok=True)
+        if self.frame_save_interval > 0:
+            self._frame_dir = os.path.join(self._episode_dir, self.frame_dir_name)
+            Path(self._frame_dir).mkdir(parents=True, exist_ok=True)
 
         final_h = top_h + self.plot_height
         final_w = top_w
