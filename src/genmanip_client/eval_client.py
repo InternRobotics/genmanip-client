@@ -189,6 +189,7 @@ def _storage_worker_process(
     fps: int,
     cam_order: list[str],
     robot_id: str | None,
+    frame_save_interval: int,
 ) -> None:
     """
     Worker process function for async storage operations.
@@ -209,6 +210,7 @@ def _storage_worker_process(
             video_scale=0.75,
             cam_order=cam_order,
             robot_id=robot_id,
+            frame_save_interval=frame_save_interval,
         )
 
     def process_record(task: dict) -> None:
@@ -337,12 +339,14 @@ class StorageWorker:
         fps: int,
         cam_order: list[str],
         robot_id: str | None,
+        frame_save_interval: int,
     ):
         self.log_dir = log_dir
         self.worker_ids = worker_ids
         self.fps = fps
         self.cam_order = cam_order
         self.robot_id = robot_id
+        self.frame_save_interval = frame_save_interval
 
         # Use multiprocessing primitives
         self._queue = multiprocessing.Queue()
@@ -364,6 +368,7 @@ class StorageWorker:
                 self.fps,
                 self.cam_order,
                 self.robot_id,
+                self.frame_save_interval,
             ),
             daemon=True,
         )
@@ -473,6 +478,7 @@ class EvalClient:
         web_view_port: int = 55090,
         web_view_interval: int = 10,
         web_view_scale: float = 1.0,
+        frame_save_interval: int = 0,
     ):
         # Print startup banner
         self.verbose = verbose
@@ -530,6 +536,7 @@ class EvalClient:
                 fps=self.fps,
                 cam_order=self.cam_order,
                 robot_id=self.robot_id,
+                frame_save_interval=frame_save_interval,
             )
 
         self.step_count = 0
@@ -565,10 +572,10 @@ class EvalClient:
                         "<style>body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#ddd;text-align:center}"
                         "img{max-width:96vw;max-height:92vh;margin-top:10px;border:1px solid #333}</style>"
                         "</head><body><h3>GenManip Stream</h3>"
-                        "<img src='/frame.jpg' id='f' />"
+                        "<img src='frame.jpg' id='f' />"
                         "<script>"
                         "setInterval(()=>{const img=document.getElementById('f');"
-                        "img.src='/frame.jpg?t='+Date.now();}, 200);"
+                        "img.src='frame.jpg?t='+Date.now();}, 200);"
                         "</script></body></html>"
                     ).encode("utf-8")
                     self.send_response(200)
@@ -1021,73 +1028,6 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
     return actions
 
 
-def _parse_list(s: str):
-    return s.split(",")
-
-
-def build_argparser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--worker_ids",
-        type=_parse_list,
-        default=["0"],
-        help="List of worker IDs, i.e. --worker_ids 0,1,2",
-    )
-    parser.add_argument(
-        "-cfg",
-        "--config",
-        type=lambda s: s.split(","),
-        default=None,
-        help="List of config paths, i.e. --config config1.yaml,config2.yaml",
-    )
-    parser.add_argument("--master", action="store_true")
-    parser.add_argument("--run_id", type=str, default="")
-    parser.add_argument("--url", type=str, default=None)
-    parser.add_argument("--host", type=str, default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8087)
-    parser.add_argument("--reset", action="store_true")
-    parser.add_argument("-a", "--arm_type", type=str, default="franka")
-    parser.add_argument("-g", "--gripper_type", type=str, default="panda_hand")
-    parser.add_argument("-c", "--control_type", type=str, default="joint_position")
-    parser.add_argument(
-        "--token",
-        type=str,
-        default=None,
-        help="API token for authenticated eval servers",
-    )
-    parser.add_argument(
-        "--robot_id",
-        type=str,
-        default=None,
-        choices=list(ROBOT_ACTION_CONFIGS.keys()),
-        help=f"Robot ID for action visualization, supported: {list(ROBOT_ACTION_CONFIGS.keys())}",
-    )
-    parser.add_argument(
-        "--web-view",
-        action="store_true",
-        help="Start a lightweight web viewer for the stream",
-    )
-    parser.add_argument(
-        "--web-view-port",
-        type=int,
-        default=8088,
-        help="Web viewer port (default: 8088)",
-    )
-    parser.add_argument(
-        "--web-view-interval",
-        type=int,
-        default=10,
-        help="Show one frame every N steps (default: 10)",
-    )
-    parser.add_argument(
-        "--web-view-scale",
-        type=float,
-        default=1.0,
-        help="Scale factor for web viewer frames (default: 1.0)",
-    )
-    return parser
-
-
 def run_cli(args: argparse.Namespace) -> int:
     if hasattr(args, "url") and args.url:
         base_url = args.url
@@ -1102,6 +1042,7 @@ def run_cli(args: argparse.Namespace) -> int:
         web_view_port=getattr(args, "web_view_port", 8088),
         web_view_interval=getattr(args, "web_view_interval", 10),
         web_view_scale=getattr(args, "web_view_scale", 1.0),
+        frame_save_interval=getattr(args, "frame_save_interval", 0),
     )
 
     try:

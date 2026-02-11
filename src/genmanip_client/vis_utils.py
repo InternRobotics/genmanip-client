@@ -133,7 +133,7 @@ class StreamingEpisodeRecorder:
         cam_order: list[str] | None = None,
         title: str = "Action",
         robot_id: str | None = None,
-        frame_save_interval: int = 30,
+        frame_save_interval: int = 10,
         frame_dir_name: str = "images",
     ):
         self.out_dir = out_dir
