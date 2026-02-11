@@ -37,6 +37,8 @@ genmanip-client --host 127.0.0.1 --port 8087 --worker_ids 0,1
 - `gmp online create`: Create an online evaluation task.
 - `gmp online ready`: Check if an online evaluation task is ready.
 - `gmp online submit`: Create an online evaluation task and poll until ready.
+- `gmp leaderboard list`: List local results under `saved/eval_results`.
+- `gmp leaderboard submit`: Zip and submit a local result to the leaderboard.
 
 ### gmp Examples
 
@@ -48,9 +50,34 @@ gmp submit configs/tasks/xxx.yml --host 127.0.0.1 --port 8087
 gmp eval --worker_ids 0,1 --host 127.0.0.1 --port 8087
 
 # Online evaluation: create and wait for endpoint, then eval
-GMP_ONLINE_URL=$(gmp online submit --base-url https://example.com --token YOUR_TOKEN --task-id T2025123100001 --print-endpoint)
+GMP_ONLINE_URL=$(gmp online submit --base_url https://example.com --token YOUR_TOKEN --task_id T2025123100001 --model_name internVLA --model_type VLA --benchmark_set EBench --print_endpoint)
 gmp eval --url "$GMP_ONLINE_URL" --token YOUR_TOKEN
+
+# Leaderboard: list and submit
+gmp leaderboard list --project_root /path/to/GenManip-Sim
+gmp leaderboard submit --run_id RUN_ID -n "My Submission" -l "EBench" --project_root /path/to/GenManip-Sim --host localhost --port 8000 --user_token YOUR_TOKEN
 ```
+
+## 🖥️ Web Viewer (Headless-Friendly)
+
+The GenManip client includes a lightweight web viewer for live camera streams when running in GUI-less terminals (e.g., DSW/SSH).
+
+Start the viewer:
+
+```bash
+gmp eval --web_view
+```
+
+Open in a browser:
+
+```
+http://<machine-ip>:55090/
+```
+
+Optional flags:
+- `--web_view_port port` to set a port for web viewer display
+- `--web_view_interval N` to show one frame every N steps (default: 10)
+- `--web_view_scale S` to scale the preview (default: 1.0)
 
 ### genmanip-client (legacy) Arguments
 

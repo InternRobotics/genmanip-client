@@ -308,7 +308,7 @@ def build_argparser() -> argparse.ArgumentParser:
         help="Config file path(s) to evaluate",
     )
     parser.add_argument(
-        "--run-id",
+        "--run_id",
         type=str,
         default=None,
         help="Run ID for this evaluation (auto-generated if not provided)",

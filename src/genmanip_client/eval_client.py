@@ -5,6 +5,7 @@ import io
 import json
 import multiprocessing
 import os
+import threading
 import sys
 from functools import wraps
 from pathlib import Path
@@ -13,12 +14,13 @@ import tempfile
 import time
 from typing import Any
 import re
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from importlib import import_module
 import numpy as np
 import requests
 
-from .vis_utils import ROBOT_ACTION_CONFIGS, StreamingEpisodeRecorder
+from .vis_utils import ROBOT_ACTION_CONFIGS, StreamingEpisodeRecorder, concat_cams_top
 
 
 # ANSI color codes
@@ -467,6 +469,10 @@ class EvalClient:
         run_id: str = "",
         verbose: bool = True,
         token: str | None = None,
+        web_view: bool = False,
+        web_view_port: int = 55090,
+        web_view_interval: int = 10,
+        web_view_scale: float = 1.0,
     ):
         # Print startup banner
         self.verbose = verbose
@@ -527,9 +533,94 @@ class EvalClient:
             )
 
         self.step_count = 0
+        self._web_view = web_view
+        self._web_view_port = int(web_view_port)
+        self._web_view_interval = max(1, int(web_view_interval))
+        self._web_view_scale = float(web_view_scale)
+        self._web_server: ThreadingHTTPServer | None = None
+        self._web_thread: threading.Thread | None = None
+        self._web_frame_lock = threading.Lock()
+        self._web_frame_jpeg: bytes | None = None
+        self._web_cv2 = None
+        if self._web_view:
+            self._start_web_viewer()
         print_info(f"Connected to server: {colored(base_url, Colors.CYAN)}")
         print_info(f"Workers: {colored(str(self.worker_ids), Colors.YELLOW)}")
         print()
+
+    def _start_web_viewer(self) -> None:
+        try:
+            import cv2  # type: ignore
+        except Exception:
+            print_info("Web viewer disabled (opencv-python not available).")
+            self._web_view = False
+            return
+        self._web_cv2 = cv2
+
+        class _Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                if self.path in ("/", "/index.html"):
+                    body = (
+                        "<html><head><title>GenManip Stream</title>"
+                        "<style>body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#ddd;text-align:center}"
+                        "img{max-width:96vw;max-height:92vh;margin-top:10px;border:1px solid #333}</style>"
+                        "</head><body><h3>GenManip Stream</h3>"
+                        "<img src='/frame.jpg' id='f' />"
+                        "<script>"
+                        "setInterval(()=>{const img=document.getElementById('f');"
+                        "img.src='/frame.jpg?t='+Date.now();}, 200);"
+                        "</script></body></html>"
+                    ).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                if self.path.startswith("/frame.jpg"):
+                    with self.server._frame_lock:
+                        data = self.server._frame_jpeg
+                    if not data:
+                        self.send_response(204)
+                        self.end_headers()
+                        return
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/jpeg")
+                    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                    self.send_header("Pragma", "no-cache")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: Any) -> None:
+                return
+
+        try:
+            server = ThreadingHTTPServer(("0.0.0.0", self._web_view_port), _Handler)
+        except OSError as exc:
+            print_i(f"Web viewer disabled (port {self._web_view_port} unavailable): {exc}")
+            self._web_view = False
+            return
+        server._frame_lock = self._web_frame_lock  # type: ignore[attr-defined]
+        server._frame_jpeg = None  # type: ignore[attr-defined]
+        self._web_server = server
+        self._web_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        self._web_thread.start()
+        print_info(f"Web viewer: http://0.0.0.0:{self._web_view_port}")
+
+    def _stop_web_viewer(self) -> None:
+        if self._web_server is None:
+            return
+        try:
+            self._web_server.shutdown()
+            self._web_server.server_close()
+        except Exception:
+            pass
+        self._web_server = None
+        self._web_thread = None
 
     def _health_check(self, timeout: float = DEFAULT_HEALTH_CHECK_TIMEOUT):
         """Check server connectivity before operations."""
@@ -559,6 +650,7 @@ class EvalClient:
     def close(self) -> None:
         """Close recorders."""
         self.close_recorders()
+        self._stop_web_viewer()
         self.kill_workers()
         print()
         print_success(f"Client closed.")
@@ -672,6 +764,7 @@ class EvalClient:
             self._record_episode_results(obs)
         step_time = time.time() - start
         self.step_count += 1
+        self._update_web_frame(obs)
 
         # Progress indicator (update every 10 steps to reduce noise)
         if self.verbose and self.step_count % 10 == 0:
@@ -685,6 +778,48 @@ class EvalClient:
                 f"{colored(f'{step_time:.3f}s', time_color)}"
             )
         return obs, done
+
+    def _update_web_frame(self, obs: dict) -> None:
+        if not self._web_view:
+            return
+        if self._web_cv2 is None:
+            return
+        if self.step_count % self._web_view_interval != 0:
+            return
+        if not self.worker_ids:
+            return
+        wid = self.worker_ids[0]
+        wdata = obs.get(wid, {})
+        wobs = wdata.get("obs", {})
+        if not wobs or wobs.get("reset"):
+            return
+        frames_by_cam = {}
+        for k, v in list(wobs.items()):
+            if isinstance(k, str) and k.startswith("video."):
+                cam_name = k.split(".", 1)[1]
+                if isinstance(v, np.ndarray):
+                    frames_by_cam[cam_name] = v
+        if not frames_by_cam:
+            return
+        try:
+            top = concat_cams_top(frames_by_cam, self.cam_order)
+        except Exception:
+            return
+        if self._web_view_scale != 1.0:
+            h, w = top.shape[:2]
+            new_w = max(2, int(w * self._web_view_scale))
+            new_h = max(2, int(h * self._web_view_scale))
+            top = self._web_cv2.resize(top, (new_w, new_h), interpolation=self._web_cv2.INTER_AREA)
+        frame_bgr = self._web_cv2.cvtColor(top, self._web_cv2.COLOR_RGB2BGR)
+        ok, buf = self._web_cv2.imencode(
+            ".jpg", frame_bgr, [int(self._web_cv2.IMWRITE_JPEG_QUALITY), 80]
+        )
+        if not ok:
+            return
+        with self._web_frame_lock:
+            self._web_frame_jpeg = buf.tobytes()
+        if self._web_server is not None:
+            self._web_server._frame_jpeg = self._web_frame_jpeg  # type: ignore[attr-defined]
 
     def handle_done(self, data: dict):
         for wobs in data.values():
@@ -927,6 +1062,29 @@ def build_argparser() -> argparse.ArgumentParser:
         choices=list(ROBOT_ACTION_CONFIGS.keys()),
         help=f"Robot ID for action visualization, supported: {list(ROBOT_ACTION_CONFIGS.keys())}",
     )
+    parser.add_argument(
+        "--web-view",
+        action="store_true",
+        help="Start a lightweight web viewer for the stream",
+    )
+    parser.add_argument(
+        "--web-view-port",
+        type=int,
+        default=8088,
+        help="Web viewer port (default: 8088)",
+    )
+    parser.add_argument(
+        "--web-view-interval",
+        type=int,
+        default=10,
+        help="Show one frame every N steps (default: 10)",
+    )
+    parser.add_argument(
+        "--web-view-scale",
+        type=float,
+        default=1.0,
+        help="Scale factor for web viewer frames (default: 1.0)",
+    )
     return parser
 
 
@@ -940,6 +1098,10 @@ def run_cli(args: argparse.Namespace) -> int:
         args.worker_ids,
         robot_id=args.robot_id,
         token=args.token,
+        web_view=getattr(args, "web_view", False),
+        web_view_port=getattr(args, "web_view_port", 8088),
+        web_view_interval=getattr(args, "web_view_interval", 10),
+        web_view_scale=getattr(args, "web_view_scale", 1.0),
     )
 
     try:

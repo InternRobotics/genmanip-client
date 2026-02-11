@@ -5,7 +5,8 @@ import time
 import requests
 
 DEFAULT_TIMEOUT = 30.0
-
+DEFAULT_ONLINE_EVAL_CREATE_TASK_PATH = "/api/v1/benchmark/onlineEvaluation/createTask"
+DEFAULT_ONLINE_EVAL_READY_PATH = "/api/v1/benchmark/onlineEvaluation/ready"
 
 class OnlineEvaluationClient:
     """Client for online evaluation API."""
@@ -52,19 +53,31 @@ class OnlineEvaluationClient:
 
         return data
 
-    def create_task(self, task_id: str | None = None) -> dict:
+    def create_task(
+        self,
+        task_id: str | None = None,
+        model_name: str | None = None,
+        model_type: str | None = None,
+        benchmark_set: str | None = None,
+    ) -> dict:
         payload: dict[str, str] = {}
         if task_id:
             payload["task_id"] = task_id
+        if model_name:
+            payload["model_name"] = model_name
+        if model_type:
+            payload["model_type"] = model_type
+        if benchmark_set:
+            payload["benchmark_set"] = benchmark_set
         return self._post(
-            "/api/v1/benchmark/onlineEvaluation/createTask",
+            DEFAULT_ONLINE_EVAL_CREATE_TASK_PATH,
             payload,
         )
 
     def ready(self, task_id: str) -> dict:
         payload = {"task_id": task_id}
         return self._post(
-            "/api/v1/benchmark/onlineEvaluation/ready",
+            DEFAULT_ONLINE_EVAL_READY_PATH,
             payload,
         )
 

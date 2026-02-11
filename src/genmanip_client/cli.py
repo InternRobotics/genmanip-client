@@ -5,6 +5,11 @@ import json
 import sys
 
 from .eval_client import build_argparser as build_eval_argparser, run_cli as run_eval_cli
+from .leaderboard import (
+    DEFAULT_LEADERBOARD_HOST,
+    DEFAULT_LEADERBOARD_PORT,
+    DEFAULT_USER_TOKEN,
+)
 from .online_client import OnlineEvaluationClient
 from .submit import build_argparser as build_submit_argparser, run_submit
 
@@ -46,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Config file path(s) to evaluate",
     )
     submit_parser.add_argument(
-        "--run-id",
+        "--run_id",
         type=str,
         default=None,
         help="Run ID for this evaluation (auto-generated if not provided)",
@@ -100,6 +105,29 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Robot ID for action visualization",
     )
+    eval_parser.add_argument(
+        "--web_view",
+        action="store_true",
+        help="Start a lightweight web viewer for the stream",
+    )
+    eval_parser.add_argument(
+        "--web_view_port",
+        type=int,
+        default=55090,
+        help="Web viewer port (default: 55090)",
+    )
+    eval_parser.add_argument(
+        "--web_view_interval",
+        type=int,
+        default=10,
+        help="Show one frame every N steps (default: 10)",
+    )
+    eval_parser.add_argument(
+        "--web_view_scale",
+        type=float,
+        default=1.0,
+        help="Scale factor for web viewer frames (default: 1.0)",
+    )
 
     # Status subcommand
     status_parser = subparsers.add_parser(
@@ -136,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Create an online evaluation task (optional task_id)",
     )
     online_create.add_argument(
-        "--base-url",
+        "--base_url",
         required=True,
         help="Online server base URL (e.g. https://example.com)",
     )
@@ -146,9 +174,24 @@ def main(argv: list[str] | None = None) -> int:
         help="API token for online evaluation",
     )
     online_create.add_argument(
-        "--task-id",
+        "--task_id",
         default=None,
         help="Optional task_id to reuse for re-run",
+    )
+    online_create.add_argument(
+        "--model_name",
+        default=None,
+        help="Model name (e.g. internVLA)",
+    )
+    online_create.add_argument(
+        "--model_type",
+        default=None,
+        help="Model type (e.g. VLA)",
+    )
+    online_create.add_argument(
+        "--benchmark_set",
+        default=None,
+        help="Benchmark set (e.g. EBench)",
     )
     online_create.add_argument(
         "--timeout",
@@ -163,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Check if online evaluation task is ready",
     )
     online_ready.add_argument(
-        "--base-url",
+        "--base_url",
         required=True,
         help="Online server base URL (e.g. https://example.com)",
     )
@@ -173,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         help="API token for online evaluation",
     )
     online_ready.add_argument(
-        "--task-id",
+        "--task_id",
         required=True,
         help="Task ID to query",
     )
@@ -190,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Create an online evaluation task and poll until ready",
     )
     online_submit.add_argument(
-        "--base-url",
+        "--base_url",
         required=True,
         help="Online server base URL (e.g. https://example.com)",
     )
@@ -200,9 +243,24 @@ def main(argv: list[str] | None = None) -> int:
         help="API token for online evaluation",
     )
     online_submit.add_argument(
-        "--task-id",
+        "--task_id",
         default=None,
         help="Optional task_id to reuse for re-run",
+    )
+    online_submit.add_argument(
+        "--model_name",
+        default=None,
+        help="Model name (e.g. internVLA)",
+    )
+    online_submit.add_argument(
+        "--model_type",
+        default=None,
+        help="Model type (e.g. VLA)",
+    )
+    online_submit.add_argument(
+        "--benchmark_set",
+        default=None,
+        help="Benchmark set (e.g. EBench)",
     )
     online_submit.add_argument(
         "--timeout",
@@ -217,9 +275,61 @@ def main(argv: list[str] | None = None) -> int:
         help="Polling interval seconds (default: 5)",
     )
     online_submit.add_argument(
-        "--print-endpoint",
+        "--print_endpoint",
         action="store_true",
         help="Print only the ready endpoint (for command substitution)",
+    )
+
+    # Leaderboard submission/listing
+    leaderboard_parser = subparsers.add_parser(
+        "leaderboard",
+        help="Leaderboard submission utilities",
+        description="Submit/list evaluation results for the leaderboard",
+    )
+    leaderboard_subparsers = leaderboard_parser.add_subparsers(
+        dest="leaderboard_command", help="Leaderboard commands"
+    )
+    leaderboard_list = leaderboard_subparsers.add_parser(
+        "list",
+        help="List available local results",
+        description="List evaluation results under saved/eval_results",
+    )
+    leaderboard_list.add_argument(
+        "--project_root",
+        default=None,
+        help="Project root containing saved/eval_results (default: cwd)",
+    )
+
+    leaderboard_submit = leaderboard_subparsers.add_parser(
+        "submit",
+        help="Submit a result to the leaderboard",
+        description="Zip and submit a local evaluation result to the leaderboard",
+    )
+    leaderboard_submit.add_argument("--run_id", required=True, help="Run ID to submit")
+    leaderboard_submit.add_argument(
+        "--benchmark_id",
+        default=None,
+        help="Benchmark ID (optional, will search if not provided)",
+    )
+    leaderboard_submit.add_argument(
+        "-n", "--submission_name", required=True, help="Name of the submission"
+    )
+    leaderboard_submit.add_argument(
+        "-l", "--leaderboard_name", required=True, help="Leaderboard name"
+    )
+    leaderboard_submit.add_argument(
+        "--user_token", default=DEFAULT_USER_TOKEN, help="User token for leaderboard"
+    )
+    leaderboard_submit.add_argument(
+        "--host", default=DEFAULT_LEADERBOARD_HOST, help="Leaderboard host"
+    )
+    leaderboard_submit.add_argument(
+        "--port", type=int, default=DEFAULT_LEADERBOARD_PORT, help="Leaderboard port"
+    )
+    leaderboard_submit.add_argument(
+        "--project_root",
+        default=None,
+        help="Project root containing saved/eval_results (default: cwd)",
     )
 
     # Parse arguments
@@ -237,6 +347,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_status(args)
     elif args.command == "online":
         return run_online(args)
+    elif args.command == "leaderboard":
+        return run_leaderboard(args)
     else:
         parser.print_help()
         return 1
@@ -267,7 +379,12 @@ def run_online(args: argparse.Namespace) -> int:
     )
     try:
         if args.online_command == "create":
-            resp = client.create_task(task_id=args.task_id)
+            resp = client.create_task(
+                task_id=args.task_id,
+                model_name=args.model_name,
+                model_type=args.model_type,
+                benchmark_set=args.benchmark_set,
+            )
             print(json.dumps(resp, indent=2))
             return 0
         if args.online_command == "ready":
@@ -275,7 +392,12 @@ def run_online(args: argparse.Namespace) -> int:
             print(json.dumps(resp, indent=2))
             return 0
         if args.online_command == "submit":
-            create_resp = client.create_task(task_id=args.task_id)
+            create_resp = client.create_task(
+                task_id=args.task_id,
+                model_name=args.model_name,
+                model_type=args.model_type,
+                benchmark_set=args.benchmark_set,
+            )
             create_data = create_resp.get("data", {}) if isinstance(create_resp, dict) else {}
             task_id = create_data.get("task_id") or args.task_id
             if not task_id:
@@ -309,3 +431,34 @@ def run_online(args: argparse.Namespace) -> int:
     except RuntimeError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+
+def run_leaderboard(args: argparse.Namespace) -> int:
+    if args.leaderboard_command is None:
+        print("Error: leaderboard subcommand required", file=sys.stderr)
+        return 1
+    from .leaderboard import list_results, submit_results
+
+    if args.leaderboard_command == "list":
+        list_results(args.project_root)
+        return 0
+    if args.leaderboard_command == "submit":
+        if args.user_token is None:
+            print(
+                "Please set USER_TOKEN environment variable or provide it by --user-token.",
+                file=sys.stderr,
+            )
+            return 1
+        submit_results(
+            args.user_token,
+            args.run_id,
+            args.submission_name,
+            args.leaderboard_name,
+            args.host,
+            args.port,
+            args.project_root,
+            benchmark_id=args.benchmark_id,
+        )
+        return 0
+    print("Error: unknown leaderboard subcommand", file=sys.stderr)
+    return 1

@@ -92,6 +92,31 @@ def get_robot_action_config(robot_id: str) -> RobotActionConfig | None:
     return ROBOT_ACTION_CONFIGS.get(robot_id)
 
 
+def concat_cams_top(
+    frames_by_cam: dict[str, np.ndarray],
+    cam_order: list[str] | None = None,
+) -> np.ndarray:
+    """Concatenate camera frames horizontally (RGB)."""
+    cams = cam_order[:] if cam_order else sorted(frames_by_cam.keys())
+    cams = [c for c in cams if c in frames_by_cam]
+
+    if not cams:
+        raise RuntimeError("No camera frames provided for this step.")
+
+    ref = frames_by_cam[cams[0]]
+    h, w = ref.shape[:2]
+
+    imgs = []
+    for c in cams:
+        im = frames_by_cam[c]
+        if im.shape[1] != w or im.shape[0] != h:
+            im = cv2.resize(im, (w, h), interpolation=cv2.INTER_AREA)
+        imgs.append(im)
+
+    top = cv2.hconcat(imgs)  # RGB
+    return top
+
+
 class StreamingEpisodeRecorder:
     """
     Stream video writing per step:
@@ -187,25 +212,7 @@ class StreamingEpisodeRecorder:
         return cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
 
     def _concat_cams_top(self, frames_by_cam: dict[str, np.ndarray]) -> np.ndarray:
-        # Decide order
-        cams = self.cam_order[:] if self.cam_order else sorted(frames_by_cam.keys())
-        cams = [c for c in cams if c in frames_by_cam]
-
-        if not cams:
-            raise RuntimeError("No camera frames provided for this step.")
-
-        # Use first cam as size reference
-        ref = frames_by_cam[cams[0]]
-        h, w = ref.shape[:2]
-
-        imgs = []
-        for c in cams:
-            im = frames_by_cam[c]
-            im = self._resize_to(im, w, h)
-            imgs.append(im)
-
-        top = cv2.hconcat(imgs)  # RGB
-        return top
+        return concat_cams_top(frames_by_cam, self.cam_order)
 
     def _render_plot_rgb(self) -> np.ndarray:
         import matplotlib
