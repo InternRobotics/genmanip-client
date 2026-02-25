@@ -43,15 +43,6 @@ def upload_submission(
         )
         return None
 
-    with open(submission_file_path, "rb") as submission_file:
-        files = {
-            "file": (
-                os.path.basename(submission_file_path),
-                submission_file,
-                "application/zip",
-            )
-        }
-
     data = {
         "submission_name": submission_name,
         "leaderboard_name": leaderboard_name,
@@ -60,7 +51,15 @@ def upload_submission(
     }
 
     try:
-        response = requests.post(url, files=files, data=data, timeout=(30, 300))
+        with open(submission_file_path, "rb") as submission_file:
+            files = {
+                "file": (
+                    os.path.basename(submission_file_path),
+                    submission_file,
+                    "application/zip",
+                )
+            }
+            response = requests.post(url, files=files, data=data, timeout=(30, 300))
         response.raise_for_status()
         result = response.json()
 
@@ -78,6 +77,7 @@ def upload_submission(
     except (
         json.JSONDecodeError,
         requests.RequestException,
+        OSError,
         RuntimeError,
         ValueError,
     ) as e:
