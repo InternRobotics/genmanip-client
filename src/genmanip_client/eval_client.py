@@ -5,6 +5,7 @@ import io
 import json
 import multiprocessing
 import os
+import queue
 import threading
 import sys
 from functools import wraps
@@ -14,6 +15,7 @@ import tempfile
 import time
 from typing import Any
 import re
+import binascii
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from importlib import import_module
@@ -122,7 +124,7 @@ def _retry_on_failure(max_retries: int = 3, backoff: float = 1.0):
 def _optional_import(name: str):
     try:
         module = import_module(name)
-    except Exception as exc:
+    except ImportError as exc:
         raise RuntimeError(
             f"Missing optional dependency '{name}'. "
             f"Install with: pip install -e '.[full]' (or install '{name}' directly)."
@@ -161,7 +163,7 @@ def decode_image(metadata: dict) -> "Any":
             image = image.convert(metadata["mode"])
 
         return image
-    except Exception as exc:
+    except (AttributeError, KeyError, TypeError, ValueError, binascii.Error) as exc:
         raise RuntimeError(f"Image decoding failed: {exc}") from exc
 
 
@@ -297,7 +299,7 @@ def _storage_worker_process(
     while not done_event.is_set():
         try:
             task = task_queue.get(timeout=0.1)
-        except Exception:
+        except queue.Empty:
             # Queue.Empty or other exceptions
             continue
 
@@ -311,7 +313,7 @@ def _storage_worker_process(
                 process_record(task)
             elif task_type == "episode_result":
                 save_episode_sr(task["episode_result"])
-        except Exception as e:
+        except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as e:
             print(
                 f"\033[31m✗\033[0m [StorageWorker] Error processing task {task_type}: {e}"
             )
@@ -558,7 +560,7 @@ class EvalClient:
     def _start_web_viewer(self) -> None:
         try:
             import cv2  # type: ignore
-        except Exception:
+        except ImportError:
             print_info("Web viewer disabled (opencv-python not available).")
             self._web_view = False
             return
@@ -700,7 +702,7 @@ class EvalClient:
         if resp.status_code != 200:
             try:
                 detail = resp.json()
-            except Exception:
+            except json.JSONDecodeError:
                 detail = resp.text
             raise RuntimeError(
                 f"HTTP error when create_workers: {resp.status_code} - {detail}"
@@ -727,7 +729,7 @@ class EvalClient:
         if resp.status_code != 200:
             try:
                 detail = resp.json()
-            except Exception:
+            except json.JSONDecodeError:
                 detail = resp.text
             raise RuntimeError(f"HTTP error on reset: {resp.status_code} - {detail}")
 
@@ -757,7 +759,7 @@ class EvalClient:
         if resp.status_code != 200:
             try:
                 detail = resp.json()
-            except Exception:
+            except json.JSONDecodeError:
                 detail = resp.text
             raise RuntimeError(f"HTTP error from server: {resp.status_code} - {detail}")
 
@@ -810,7 +812,8 @@ class EvalClient:
             return
         try:
             top = concat_cams_top(frames_by_cam, self.cam_order)
-        except Exception:
+        except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as exc:
+            print_info(f"Failed to generate web frame: {exc}")
             return
         if self._web_view_scale != 1.0:
             h, w = top.shape[:2]
@@ -908,7 +911,7 @@ class EvalClient:
         if resp.status_code != 200:
             try:
                 detail = resp.json()
-            except Exception:
+            except json.JSONDecodeError:
                 detail = resp.text
             raise RuntimeError(
                 f"HTTP error on kill_workers: {resp.status_code} - {detail}"
