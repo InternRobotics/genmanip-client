@@ -624,8 +624,8 @@ class EvalClient:
         try:
             self._web_server.shutdown()
             self._web_server.server_close()
-        except Exception:
-            pass
+        except (OSError, RuntimeError) as exc:
+            print_info(f"Web viewer shutdown warning: {exc}")
         self._web_server = None
         self._web_thread = None
 
