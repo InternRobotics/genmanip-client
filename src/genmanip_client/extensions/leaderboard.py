@@ -43,13 +43,14 @@ def upload_submission(
         )
         return None
 
-    files = {
-        "file": (
-            os.path.basename(submission_file_path),
-            open(submission_file_path, "rb"),
-            "application/zip",
-        )
-    }
+    with open(submission_file_path, "rb") as submission_file:
+        files = {
+            "file": (
+                os.path.basename(submission_file_path),
+                submission_file,
+                "application/zip",
+            )
+        }
 
     data = {
         "submission_name": submission_name,
@@ -74,7 +75,12 @@ def upload_submission(
             print(f"Upload failed: {result.get('error')}")
 
         return result
-    except Exception as e:
+    except (
+        json.JSONDecodeError,
+        requests.RequestException,
+        RuntimeError,
+        ValueError,
+    ) as e:
         print(f"An error occurred: {e}")
         return {"status": "error", "error": str(e)}
 
