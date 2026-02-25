@@ -147,7 +147,7 @@ def start_job(
         if resp.status_code != 200:
             try:
                 detail = resp.json()
-            except Exception:
+            except (ValueError, TypeError):
                 detail = resp.text
             raise RuntimeError(
                 f"Failed to start job: {resp.status_code} - {detail}"
