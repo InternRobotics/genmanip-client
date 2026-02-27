@@ -652,6 +652,8 @@ class EvalClient:
     # ================= Lifecycle =================
     def _build_headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
         headers = dict(self._auth_headers)
+        if self.run_id:
+            headers["run_id"] = self.run_id
         if extra:
             headers.update(extra)
         return headers
@@ -1041,6 +1043,7 @@ def run_cli(args: argparse.Namespace) -> int:
         args.worker_ids,
         robot_id=args.robot_id,
         token=args.token,
+        run_id=getattr(args, "run_id", "") or "",
         web_view=getattr(args, "web_view", False),
         web_view_port=getattr(args, "web_view_port", 8088),
         web_view_interval=getattr(args, "web_view_interval", 10),

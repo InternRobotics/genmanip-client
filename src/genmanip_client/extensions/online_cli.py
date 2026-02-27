@@ -136,7 +136,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     online_submit.add_argument(
         "--print_endpoint",
         action="store_true",
-        help="Print only the ready endpoint (for command substitution)",
+        help="Print only the ready endpoint and task_id (for command substitution)",
     )
 
 
@@ -189,7 +189,15 @@ def run(args: argparse.Namespace) -> int:
             if args.print_endpoint:
                 if not endpoint:
                     raise RuntimeError("Ready response missing endpoint")
-                print(endpoint)
+                print(
+                    json.dumps(
+                        {
+                            "task_id": task_id,
+                            "endpoint": endpoint,
+                        },
+                        indent=2,
+                    )
+                )
             else:
                 print(
                     json.dumps(

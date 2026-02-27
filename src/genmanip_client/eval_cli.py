@@ -31,6 +31,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="API token for authenticated eval servers",
     )
     eval_parser.add_argument(
+        "--run_id",
+        type=str,
+        default=None,
+        help="Optional run ID to include in request headers",
+    )
+    eval_parser.add_argument(
         "--robot_id",
         type=str,
         default=None,
