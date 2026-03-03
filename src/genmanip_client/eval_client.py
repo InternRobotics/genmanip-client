@@ -13,6 +13,7 @@ from pathlib import Path
 import pickle
 import tempfile
 import time
+from turbojpeg import TurboJPEG, TJPF_RGB
 from typing import Any
 import re
 import binascii
@@ -132,8 +133,14 @@ def _optional_import(name: str):
     return module
 
 
-def decode_numpy(metadata: dict) -> "Any":
-    np = _optional_import("numpy")
+_jpeg = TurboJPEG() 
+def decode_numpy(metadata):
+    if type(metadata) is not dict:
+        return _jpeg.decode(
+            metadata,
+            pixel_format=TJPF_RGB
+        )
+
     decoded_bytes = base64.b64decode(metadata["data"])
     numpy_array = np.frombuffer(decoded_bytes, dtype=np.dtype(metadata["dtype"]))
     numpy_array = numpy_array.reshape(metadata["shape"])
