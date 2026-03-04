@@ -13,6 +13,7 @@ from pathlib import Path
 import pickle
 import tempfile
 import time
+import uuid
 from turbojpeg import TurboJPEG, TJPF_RGB
 from typing import Any
 import re
@@ -97,6 +98,7 @@ DEFAULT_STEP_TIMEOUT = 600  # 10 minutes
 DEFAULT_RESET_TIMEOUT = 600  # 10 minutes
 DEFAULT_CREATE_TIMEOUT = 600  # 10 minutes
 DEFAULT_HEALTH_CHECK_TIMEOUT = 5.0
+DEFAULT_STORAGE_LOCK_TIMEOUT = 5.0
 
 
 def _retry_on_failure(max_retries: int = 3, backoff: float = 1.0):
@@ -201,6 +203,7 @@ def _storage_worker_process(
     cam_order: list[str],
     robot_id: str | None,
     frame_save_interval: int,
+    client_uid: str,
 ) -> None:
     """
     Worker process function for async storage operations.
@@ -216,6 +219,7 @@ def _storage_worker_process(
     for wid in worker_ids:
         recorders[wid] = StreamingEpisodeRecorder(
             out_dir=log_dir,
+            client_uid=client_uid,
             fps=fps,
             plot_height=600,
             video_scale=0.75,
@@ -282,27 +286,34 @@ def _storage_worker_process(
         task_sr_path = task_dir / "episode_sr.json"
         lock_path = task_sr_path.with_suffix(".lock")
 
-        with SoftFileLock(lock_path):
-            task_sr = {}
+        try:
+            with SoftFileLock(lock_path, timeout=DEFAULT_STORAGE_LOCK_TIMEOUT):
+                task_sr = {}
 
-            if task_sr_path.exists():
-                with task_sr_path.open("r", encoding="utf-8") as f:
-                    task_sr = json.load(f)
+                if task_sr_path.exists():
+                    with task_sr_path.open("r", encoding="utf-8") as f:
+                        task_sr = json.load(f)
 
-            task_sr[str(seed)] = sr_value
+                task_sr[str(seed)] = sr_value
 
-            dir_path = task_sr_path.parent
-            fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(task_sr, f, indent=2, sort_keys=True)
-                    f.flush()
-                    os.fsync(f.fileno())
+                dir_path = task_sr_path.parent
+                fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        json.dump(task_sr, f, indent=2, sort_keys=True)
+                        f.flush()
+                        os.fsync(f.fileno())
 
-                os.replace(tmp_path, task_sr_path)
-            finally:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
+                    os.replace(tmp_path, task_sr_path)
+                finally:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+        except Timeout:
+            print(
+                "\033[33m⚠\033[0m "
+                f"[StorageWorker] Timeout acquiring episode_sr lock: {lock_path}"
+            )
+            return
 
     # Main loop
     while not done_event.is_set():
@@ -351,6 +362,7 @@ class StorageWorker:
         cam_order: list[str],
         robot_id: str | None,
         frame_save_interval: int,
+        client_uid: str,
     ):
         self.log_dir = log_dir
         self.worker_ids = worker_ids
@@ -358,6 +370,7 @@ class StorageWorker:
         self.cam_order = cam_order
         self.robot_id = robot_id
         self.frame_save_interval = frame_save_interval
+        self.client_uid = client_uid
 
         # Use multiprocessing primitives
         self._queue = multiprocessing.Queue()
@@ -380,6 +393,7 @@ class StorageWorker:
                 self.cam_order,
                 self.robot_id,
                 self.frame_save_interval,
+                self.client_uid,
             ),
             daemon=True,
         )
@@ -516,9 +530,11 @@ class EvalClient:
         self.step_timeout = step_timeout
         self.reset_timeout = reset_timeout
         self.run_id = run_id
+        self.client_uid = uuid.uuid4().hex[:8]
         self.log_dir = os.environ.get("GENMANIP_RESULT_DIR", "client_results")
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
         print_info(f"Results directory: {colored(self.log_dir, Colors.CYAN)}")
+        print_info(f"Client UID: {colored(self.client_uid, Colors.CYAN)}")
 
         self.worker_ids = worker_ids
         self.robot_id = robot_id
@@ -548,6 +564,7 @@ class EvalClient:
                 cam_order=self.cam_order,
                 robot_id=self.robot_id,
                 frame_save_interval=frame_save_interval,
+                client_uid=self.client_uid,
             )
 
         self.step_count = 0
@@ -843,7 +860,10 @@ class EvalClient:
             self._web_server._frame_jpeg = self._web_frame_jpeg  # type: ignore[attr-defined]
 
     def handle_done(self, data: dict):
-        for wobs in data.values():
+        for worker_id, wobs in data.items():
+            if wobs.get("lock_lost"):
+                print_info(f"Worker {worker_id} lost lock; retrying with a new episode")
+                continue
             if wobs["obs"] is not None and wobs["obs"]["reset"]:
                 self._print_eval_result(wobs["metric"], title="Episode Result")
         if all(

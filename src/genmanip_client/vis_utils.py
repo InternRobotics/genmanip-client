@@ -127,6 +127,7 @@ class StreamingEpisodeRecorder:
     def __init__(
         self,
         out_dir: str,
+        client_uid: str = "",
         fps: int = 30,
         plot_height: int = 480,
         video_scale=0.6,
@@ -137,6 +138,7 @@ class StreamingEpisodeRecorder:
         frame_dir_name: str = "images",
     ):
         self.out_dir = out_dir
+        self.client_uid = client_uid
         self.fps = fps
         self.plot_height = plot_height
         self.video_scale = video_scale
@@ -201,7 +203,8 @@ class StreamingEpisodeRecorder:
         final_w = top_w
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out_path = os.path.join(self._episode_dir, "merged_with_plot.mp4")
+        suffix = f"_{self.client_uid}" if self.client_uid else ""
+        out_path = os.path.join(self._episode_dir, f"merged_with_plot{suffix}.mp4")
         self._writer = cv2.VideoWriter(out_path, fourcc, self.fps, (final_w, final_h))
 
         self._frame_w = final_w
