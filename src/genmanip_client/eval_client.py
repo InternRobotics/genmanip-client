@@ -134,13 +134,13 @@ def _optional_import(name: str):
 
 
 _jpeg = TurboJPEG() 
-def decode_numpy(metadata):
-    if type(metadata) is not dict:
-        return _jpeg.decode(
-            metadata,
-            pixel_format=TJPF_RGB
-        )
+def decode_jpeg(metadata):
+    return _jpeg.decode(
+        metadata["data"],
+        pixel_format=TJPF_RGB
+    )
 
+def decode_numpy(metadata):
     decoded_bytes = base64.b64decode(metadata["data"])
     numpy_array = np.frombuffer(decoded_bytes, dtype=np.dtype(metadata["dtype"]))
     numpy_array = numpy_array.reshape(metadata["shape"])
@@ -182,6 +182,8 @@ def deserialize_data(data: Any):
             return decode_tensor(data)
         if data["type"] == "image":
             return decode_image(data)
+        if data["type"] == "jpeg_bytes":
+            return decode_jpeg(data)
     if isinstance(data, (list, tuple)):
         return [deserialize_data(item) for item in data]
     if isinstance(data, dict):
