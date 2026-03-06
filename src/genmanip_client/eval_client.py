@@ -1,5 +1,6 @@
 import argparse
 import base64
+import copy
 from filelock import SoftFileLock
 import io
 import json
@@ -480,6 +481,7 @@ class EvalClient:
     """
     EvalClient in binary mode:
     - /step:  pickled action_dict <-> pickled response_dict
+    - /step_chunk: pickled list[action_dict] <-> pickled {"obs": ..., "executed_steps": ...}
     - /reset: pickled {"worker_ids": [...]} <-> pickled obs_dict
     - /kill: kill all workers
     - /load_config: load a new task config, restart server
@@ -767,7 +769,7 @@ class EvalClient:
         print()
         return obs
 
-    def step(self, action_dict: dict) -> tuple[dict, bool]:
+    def _step_single(self, action_dict: dict) -> tuple[dict, bool]:
         start = time.time()
         payload = pickle.dumps(action_dict, protocol=pickle.HIGHEST_PROTOCOL)
         try:
@@ -812,6 +814,159 @@ class EvalClient:
             )
             print(
                 f"  {colored('⟳', Colors.DIM)} Step {colored(str(self.step_count), Colors.WHITE)}: "
+                f"{colored(f'{step_time:.3f}s', time_color)}"
+            )
+        return obs, done
+
+    def _is_chunk_input(self, action_input: Any) -> bool:
+        """Return True if `action_input` should be treated as chunk input."""
+        if isinstance(action_input, list):
+            return True
+        if not isinstance(action_input, dict):
+            return False
+        if len(action_input) == 0:
+            return False
+        worker_id_set = set(self.worker_ids)
+        if not all(wid in worker_id_set for wid in action_input.keys()):
+            return False
+        # worker-major chunk format: dict[worker_id -> list[action]]
+        return all(isinstance(v, list) for v in action_input.values())
+
+    def step(self, action_input: Any) -> tuple[dict, bool]:
+        """
+        Unified stepping API.
+
+        - Single-step input: dict[worker_id -> action], goes to /step.
+        - Chunk input:
+          1) list[action_dict]
+          2) dict[worker_id -> list[action]]
+          3) (single worker) list[action]
+          goes to /step_chunk.
+        """
+        if self._is_chunk_input(action_input):
+            return self.step_chunk(action_input)
+        if not isinstance(action_input, dict):
+            raise ValueError("Single-step input must be dict[worker_id -> action]")
+        return self._step_single(action_input)
+
+    def _normalize_action_chunk(self, action_chunk: Any) -> list[dict]:
+        """
+        Normalize user-provided chunk formats to list[action_dict(worker_id -> action)].
+
+        Supported formats:
+        1) list[action_dict], action_dict is the same payload used by `step()`.
+        2) dict[worker_id -> list[action]]
+        3) single-worker only: list[action]
+        """
+        if isinstance(action_chunk, list):
+            if len(action_chunk) == 0:
+                raise ValueError("action_chunk list cannot be empty")
+            normalized: list[dict] = []
+            single_worker = len(self.worker_ids) == 1
+            single_wid = self.worker_ids[0] if single_worker else None
+            worker_id_set = set(self.worker_ids)
+
+            for item in action_chunk:
+                if isinstance(item, dict) and any(k in worker_id_set for k in item):
+                    normalized.append(item)
+                    continue
+                if single_worker:
+                    normalized.append({single_wid: item})
+                    continue
+                raise ValueError(
+                    "For multi-worker chunk, list items must be action_dict keyed by worker_id"
+                )
+            return normalized
+
+        if isinstance(action_chunk, dict):
+            if len(action_chunk) == 0:
+                raise ValueError("action_chunk dict cannot be empty")
+            for wid, actions in action_chunk.items():
+                if not isinstance(actions, list):
+                    raise ValueError(
+                        "worker-major action_chunk must be dict[worker_id -> list[action]]"
+                    )
+                if wid not in self.worker_ids:
+                    raise ValueError(f"Unknown worker_id in chunk: {wid}")
+
+            max_len = max((len(v) for v in action_chunk.values()), default=0)
+            if max_len == 0:
+                raise ValueError("action_chunk has no actions")
+            normalized = []
+            for i in range(max_len):
+                step_action = {
+                    wid: actions[i]
+                    for wid, actions in action_chunk.items()
+                    if i < len(actions)
+                }
+                if step_action:
+                    normalized.append(step_action)
+            return normalized
+
+        raise ValueError(
+            "Unsupported action_chunk format. Use list[action_dict], dict[worker_id->list[action]], or (single worker) list[action]."
+        )
+
+    def step_chunk(self, action_chunk: Any) -> tuple[dict, bool]:
+        """
+        Send action chunk in one request and return the final obs.
+        Server may stop early if reset/final completion happens in the middle.
+        """
+        start = time.time()
+        normalized_chunk = self._normalize_action_chunk(action_chunk)
+        payload = pickle.dumps(normalized_chunk, protocol=pickle.HIGHEST_PROTOCOL)
+        chunk_timeout = self.step_timeout * max(1, len(normalized_chunk))
+        try:
+            resp = requests.post(
+                f"{self.base_url}/step_chunk",
+                data=payload,
+                headers=self._build_headers(
+                    {"Content-Type": "application/octet-stream"}
+                ),
+                timeout=chunk_timeout,
+            )
+        except requests.Timeout:
+            raise RuntimeError(
+                f"Step chunk request timed out after {chunk_timeout}s"
+            )
+        except requests.RequestException as exc:
+            raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
+
+        if resp.status_code != 200:
+            try:
+                detail = resp.json()
+            except json.JSONDecodeError:
+                detail = resp.text
+            raise RuntimeError(f"HTTP error from server: {resp.status_code} - {detail}")
+
+        chunk_result = pickle.loads(resp.content)
+        if not isinstance(chunk_result, dict) or "obs" not in chunk_result:
+            raise ValueError("Invalid step_chunk response from server")
+
+        obs_dict = chunk_result["obs"]
+        executed_steps = int(chunk_result.get("executed_steps", len(normalized_chunk)))
+        done = self.handle_done(obs_dict)
+        obs = deserialize_data(obs_dict)
+        if not isinstance(obs, dict):
+            raise ValueError("Obs is not a dictionary")
+
+        if self.save_result and executed_steps > 0:
+            last_action = normalized_chunk[min(executed_steps, len(normalized_chunk)) - 1]
+            self._record(obs, last_action)
+            self._record_episode_results(obs)
+
+        self.step_count += max(0, executed_steps)
+        self._update_web_frame(obs)
+        step_time = time.time() - start
+
+        if self.verbose:
+            time_color = (
+                Colors.BRIGHT_GREEN
+                if step_time < 0.1
+                else Colors.YELLOW if step_time < 0.5 else Colors.RED
+            )
+            print(
+                f"  {colored('⟳', Colors.DIM)} Chunk {colored(str(executed_steps), Colors.WHITE)} steps: "
                 f"{colored(f'{step_time:.3f}s', time_color)}"
             )
         return obs, done
@@ -949,7 +1104,12 @@ class EvalClient:
             )
 
 
-def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
+def fake_action(
+    arm_type: str, gripper_type: str, control_type: str, chunk_size: int = 1
+) -> dict | list[dict]:
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be >= 1")
+
     if arm_type == "franka":
         if gripper_type == "panda_hand":
             if control_type == "joint_position":
@@ -1059,7 +1219,9 @@ def fake_action(arm_type: str, gripper_type: str, control_type: str) -> dict:
             raise ValueError("Invalid gripper type")
     else:
         raise ValueError("Invalid arm type")
-    return actions
+    if chunk_size == 1:
+        return actions
+    return [copy.deepcopy(actions) for _ in range(chunk_size)]
 
 
 def run_cli(args: argparse.Namespace) -> int:
@@ -1079,12 +1241,20 @@ def run_cli(args: argparse.Namespace) -> int:
         web_view_scale=getattr(args, "web_view_scale", 1.0),
         frame_save_interval=getattr(args, "frame_save_interval", 0),
     )
+    chunk_size = int(getattr(args, "chunk_size", 1))
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be >= 1")
 
     try:
         _ = client.reset()
         while True:
             action = {
-                i: fake_action(args.arm_type, args.gripper_type, args.control_type)
+                i: fake_action(
+                    args.arm_type,
+                    args.gripper_type,
+                    args.control_type,
+                    chunk_size=chunk_size,
+                )
                 for i in args.worker_ids
             }
             obs, done = client.step(action)

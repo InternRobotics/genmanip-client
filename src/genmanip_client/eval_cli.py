@@ -71,6 +71,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         default=0,
         help="Save one image every N steps (0 disables, default: 0)",
     )
+    eval_parser.add_argument(
+        "--chunk_size",
+        type=int,
+        default=1,
+        help="Number of actions sent per request (default: 1). >1 enables chunked stepping.",
+    )
 
 
 def run(args: argparse.Namespace) -> int:
