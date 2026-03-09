@@ -156,12 +156,49 @@ class StreamingEpisodeRecorder:
         self._frame_dir: str | None = None
         self._t = 0
         self._actions: list[list[float]] = []
+        self._states: list[list[float]] = []
         self._action_dim: int | None = None
+        self._state_dim: int | None = None
         self._frame_w: int | None = None
         self._frame_h: int | None = None
         self._current_episode: str | None = None
 
     # ---------- helpers ----------
+    def _process_state(self, state_dict: dict[str, Any]) -> list[float]:
+        if not state_dict or self._robot_config is None:
+            return []
+        
+        cfg = self._robot_config
+        # Extract components based on expected keys
+        joints = np.array(state_dict.get("state.joints", []))
+        gripper = np.array(state_dict.get("state.gripper", []))
+        base = np.array(state_dict.get("state.base", []))
+        
+        vec = []
+        
+        if cfg.is_dual_arm:
+            # Assume equal split for dual arm
+            n_j = len(joints) // 2
+            n_g = len(gripper) // 2
+            
+            l_arm = joints[:n_j]
+            r_arm = joints[n_j:]
+            l_grip = gripper[:n_g]
+            r_grip = gripper[n_g:]
+            
+            vec.extend(l_arm)
+            vec.extend(l_grip)
+            vec.extend(r_arm)
+            vec.extend(r_grip)
+        else:
+            vec.extend(joints)
+            vec.extend(gripper)
+            
+        if cfg.base_slice:
+            vec.extend(base)
+            
+        return [float(x) for x in vec]
+
     def _flatten_action(self, action: Any) -> list[float]:
         out: list[float] = []
         if action is None:
@@ -227,14 +264,101 @@ class StreamingEpisodeRecorder:
         plot_w = int(self._frame_w or 640)
         plot_h = int(self.plot_height)
 
-        if not getattr(self, "_actions", None):
+        if not getattr(self, "_actions", None) and not getattr(self, "_states", None):
             return np.zeros((plot_h, plot_w, 3), dtype=np.uint8)
 
-        arr = np.asarray(self._actions, dtype=np.float32)
-        if arr.ndim != 2:
-            return np.zeros((plot_h, plot_w, 3), dtype=np.uint8)
+        # Helper to plot data
+        def plot_data(ax_list, data_arr, t, title_prefix, cfg):
+            if data_arr.ndim != 2:
+                return
 
-        t = arr.shape[0] - 1
+            if cfg is None:
+                ax = ax_list[0]
+                ax.plot(data_arr)
+                ax.axvline(x=t, linewidth=2)
+                ax.set_title(f"{title_prefix} (dim={data_arr.shape[1]})")
+                ax.set_xlabel("step")
+                ax.set_ylabel("value")
+                ax.grid(True, alpha=0.2)
+                return
+
+            if cfg.is_dual_arm:
+                left_j = data_arr[:, cfg.left_arm_slice[0] : cfg.left_arm_slice[1]]
+                left_g = data_arr[:, cfg.left_gripper_slice[0] : cfg.left_gripper_slice[1]]
+
+                if cfg.right_arm_slice and cfg.right_gripper_slice:
+                    right_j = data_arr[:, cfg.right_arm_slice[0] : cfg.right_arm_slice[1]]
+                    right_g = data_arr[:, cfg.right_gripper_slice[0] : cfg.right_gripper_slice[1]]
+                else:
+                    right_j = None
+                    right_g = None
+
+                has_base = cfg.base_slice is not None
+                
+                # 1) joints
+                ax1 = ax_list[0]
+                ax1.plot(left_j, label="left")
+                if right_j is not None:
+                    ax1.plot(right_j, label="right", linestyle="--")
+                ax1.axvline(x=t, linewidth=2)
+                ax1.set_title(f"{title_prefix} Joints")
+                ax1.set_ylabel("joint")
+                ax1.grid(True, alpha=0.2)
+
+                # 2) grippers
+                ax2 = ax_list[1]
+                ax2.plot(left_g, label="left")
+                if right_g is not None:
+                    ax2.plot(right_g, label="right", linestyle="--")
+                ax2.axvline(x=t, linewidth=2)
+                ax2.set_title(f"{title_prefix} Grippers")
+                ax2.set_ylabel("grip")
+                ax2.grid(True, alpha=0.2)
+
+                # 3) base
+                if has_base and cfg.base_slice and len(ax_list) > 2:
+                    ax3 = ax_list[2]
+                    base = data_arr[:, cfg.base_slice[0] : cfg.base_slice[1]]
+                    ax3.plot(base)
+                    ax3.axvline(x=t, linewidth=2)
+                    ax3.set_title(f"{title_prefix} Base")
+                    ax3.set_xlabel("step")
+                    ax3.set_ylabel("base")
+                    ax3.grid(True, alpha=0.2)
+                else:
+                    ax2.set_xlabel("step")
+
+            else:
+                # Single arm
+                arm_j = data_arr[:, cfg.left_arm_slice[0] : cfg.left_arm_slice[1]]
+                gripper = data_arr[:, cfg.left_gripper_slice[0] : cfg.left_gripper_slice[1]]
+
+                ax1 = ax_list[0]
+                ax2 = ax_list[1]
+
+                ax1.plot(arm_j)
+                ax1.axvline(x=t, linewidth=2)
+                ax1.set_title(f"{title_prefix} Arm Joints")
+                ax1.set_ylabel("joint")
+                ax1.grid(True, alpha=0.2)
+
+                ax2.plot(gripper)
+                ax2.axvline(x=t, linewidth=2)
+                ax2.set_title(f"{title_prefix} Gripper")
+                ax2.set_xlabel("step")
+                ax2.set_ylabel("grip")
+                ax2.grid(True, alpha=0.2)
+
+        # Prepare data
+        actions_arr = np.asarray(self._actions, dtype=np.float32) if self._actions else None
+        states_arr = np.asarray(self._states, dtype=np.float32) if self._states else None
+        
+        t = 0
+        if actions_arr is not None and actions_arr.size > 0:
+            t = actions_arr.shape[0] - 1
+        elif states_arr is not None and states_arr.size > 0:
+            t = states_arr.shape[0] - 1
+
         if self.robot_id is not None and self._robot_config is None:
             self._robot_config = get_robot_action_config(self.robot_id)
         cfg = self._robot_config
@@ -243,98 +367,37 @@ class StreamingEpisodeRecorder:
         fig_w_in = plot_w / dpi
         fig_h_in = plot_h / dpi
 
+        # Determine layout
+        has_states = states_arr is not None and states_arr.size > 0
+        has_actions = actions_arr is not None and actions_arr.size > 0
+        
+        cols = 2 if (has_states and has_actions) else 1
+        
         if cfg is None:
-            # Fallback: plot all dimensions as a single plot
-            fig = plt.figure(figsize=(fig_w_in, fig_h_in), dpi=dpi)
-            ax = fig.add_subplot(1, 1, 1)
-            ax.plot(arr)
-            ax.axvline(x=t, linewidth=2)
-            ax.set_title(f"Action (dim={arr.shape[1]})")
-            ax.set_xlabel("step")
-            ax.set_ylabel("value")
-            ax.grid(True, alpha=0.2)
-        elif cfg.is_dual_arm:
-            # Dual arm robot: joints, grippers, base
-            fig = plt.figure(figsize=(fig_w_in, fig_h_in), dpi=dpi)
-
-            left_j = arr[:, cfg.left_arm_slice[0] : cfg.left_arm_slice[1]]
-            left_g = arr[:, cfg.left_gripper_slice[0] : cfg.left_gripper_slice[1]]
-
-            if cfg.right_arm_slice and cfg.right_gripper_slice:
-                right_j = arr[:, cfg.right_arm_slice[0] : cfg.right_arm_slice[1]]
-                right_g = arr[
-                    :, cfg.right_gripper_slice[0] : cfg.right_gripper_slice[1]
-                ]
-            else:
-                right_j = None
-                right_g = None
-
-            has_base = cfg.base_slice is not None
-            num_plots = 3 if has_base else 2
-
-            ax1 = fig.add_subplot(num_plots, 1, 1)
-            ax2 = fig.add_subplot(num_plots, 1, 2, sharex=ax1)
-
-            # 1) joints
-            ax1.plot(left_j, label="left")
-            if right_j is not None:
-                ax1.plot(right_j, label="right", linestyle="--")
-            ax1.axvline(x=t, linewidth=2)
-            ax1.set_title("Joints: left, right")
-            ax1.set_ylabel("joint")
-            ax1.grid(True, alpha=0.2)
-
-            # 2) grippers
-            ax2.plot(left_g, label="left")
-            if right_g is not None:
-                ax2.plot(right_g, label="right", linestyle="--")
-            ax2.axvline(x=t, linewidth=2)
-            ax2.set_title("Grippers: left, right")
-            ax2.set_ylabel("grip")
-            ax2.grid(True, alpha=0.2)
-
-            # 3) base (if exists)
-            if has_base and cfg.base_slice:
-                ax3 = fig.add_subplot(num_plots, 1, 3, sharex=ax1)
-                base = arr[:, cfg.base_slice[0] : cfg.base_slice[1]]
-                ax3.plot(base)
-                ax3.axvline(x=t, linewidth=2)
-                ax3.set_title("Base: x, y, theta")
-                ax3.set_xlabel("step")
-                ax3.set_ylabel("base")
-                ax3.grid(True, alpha=0.2)
-            else:
-                ax2.set_xlabel("step")
+            rows = 1
+        elif cfg.is_dual_arm and cfg.base_slice:
+            rows = 3
         else:
-            # Single arm robot: joints, gripper
-            fig = plt.figure(figsize=(fig_w_in, fig_h_in), dpi=dpi)
+            rows = 2
+            
+        fig = plt.figure(figsize=(fig_w_in, fig_h_in), dpi=dpi)
+        gs = fig.add_gridspec(rows, cols)
 
-            arm_j = arr[:, cfg.left_arm_slice[0] : cfg.left_arm_slice[1]]
-            gripper = arr[:, cfg.left_gripper_slice[0] : cfg.left_gripper_slice[1]]
-
-            ax1 = fig.add_subplot(2, 1, 1)
-            ax2 = fig.add_subplot(2, 1, 2, sharex=ax1)
-
-            # 1) joints
-            ax1.plot(arm_j)
-            ax1.axvline(x=t, linewidth=2)
-            ax1.set_title("Arm Joints")
-            ax1.set_ylabel("joint")
-            ax1.grid(True, alpha=0.2)
-
-            # 2) gripper
-            ax2.plot(gripper)
-            ax2.axvline(x=t, linewidth=2)
-            ax2.set_title("Gripper")
-            ax2.set_xlabel("step")
-            ax2.set_ylabel("grip")
-            ax2.grid(True, alpha=0.2)
+        if has_states:
+            col_idx = 0
+            ax_list = [fig.add_subplot(gs[i, col_idx]) for i in range(rows)]
+            plot_data(ax_list, states_arr, t, "State", cfg)
+            
+        if has_actions:
+            col_idx = 1 if has_states else 0
+            ax_list = [fig.add_subplot(gs[i, col_idx]) for i in range(rows)]
+            plot_data(ax_list, actions_arr, t, "Pred Action", cfg)
 
         fig.tight_layout(pad=0.4)
 
         fig.canvas.draw()
-        rgba = np.asarray(fig.canvas.buffer_rgba())  # (h, w, 4)
-        rgb = rgba[:, :, :3].copy()  # (h, w, 3)
+        rgba = np.asarray(fig.canvas.buffer_rgba())
+        rgb = rgba[:, :, :3].copy()
 
         plt.close(fig)
 
@@ -349,6 +412,7 @@ class StreamingEpisodeRecorder:
         episode_id: str,
         frames_by_cam: dict[str, np.ndarray],
         action: Any,
+        state: Any = None,
         robot_id: str | None = None,
     ):
         """
@@ -383,6 +447,22 @@ class StreamingEpisodeRecorder:
             if self._action_dim is not None:
                 self._actions.append([0.0] * self._action_dim)
 
+        # record state
+        if isinstance(state, dict):
+            state_vec = self._process_state(state)
+        else:
+            state_vec = []
+            
+        if state_vec:
+            if self._state_dim is None:
+                self._state_dim = len(state_vec)
+            d = min(len(state_vec), self._state_dim)
+            state_vec = state_vec[:d]
+            self._states.append(state_vec)
+        else:
+            if self._state_dim is not None:
+                self._states.append([0.0] * self._state_dim)
+
         plot = self._render_plot_rgb()
 
         # Compose final frame: top + plot (both RGB)
@@ -411,7 +491,9 @@ class StreamingEpisodeRecorder:
             self._writer = None
         self._t = 0
         self._actions.clear()
+        self._states.clear()
         self._action_dim = None
+        self._state_dim = None
         self._frame_w = None
         self._frame_h = None
         self._episode_dir = None

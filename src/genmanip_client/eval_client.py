@@ -259,6 +259,7 @@ def _storage_worker_process(
                     episode_id=episode_id,
                     frames_by_cam=frames_by_cam,
                     action=wdata.get("action", None),
+                    state=wobs,  # Pass the full observation dict as state
                     robot_id=wobs.get("robot_id", None),
                 )
 
