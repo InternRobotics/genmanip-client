@@ -667,6 +667,7 @@ class EvalClient:
                 f"{self.base_url}/docs",
                 timeout=timeout,
                 headers=self._build_headers(),
+                params=self._build_params(),
             )
             if resp.status_code != 200:
                 raise RuntimeError(
@@ -686,6 +687,14 @@ class EvalClient:
         if extra:
             headers.update(extra)
         return headers
+
+    def _build_params(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        params: dict[str, str] = {}
+        if self.run_id:
+            params["run_id"] = self.run_id
+        if extra:
+            params.update(extra)
+        return params
 
     def close(self) -> None:
         """Close recorders."""
@@ -725,6 +734,7 @@ class EvalClient:
                 json={"data": {"worker_ids": self.worker_ids}},
                 timeout=DEFAULT_CREATE_TIMEOUT,
                 headers=self._build_headers(),
+                params=self._build_params(),
             )
         except requests.Timeout:
             raise RuntimeError(
@@ -750,6 +760,7 @@ class EvalClient:
                 headers=self._build_headers(
                     {"Content-Type": "application/octet-stream"}
                 ),
+                params=self._build_params(),
                 timeout=self.reset_timeout,
             )
         except requests.Timeout:
@@ -780,6 +791,7 @@ class EvalClient:
                 headers=self._build_headers(
                     {"Content-Type": "application/octet-stream"}
                 ),
+                params=self._build_params(),
                 timeout=self.step_timeout,
             )
         except requests.Timeout:
@@ -924,6 +936,7 @@ class EvalClient:
                 headers=self._build_headers(
                     {"Content-Type": "application/octet-stream"}
                 ),
+                params=self._build_params(),
                 timeout=chunk_timeout,
             )
         except requests.Timeout:
@@ -1094,6 +1107,7 @@ class EvalClient:
             json={"data": {"worker_ids": self.worker_ids}},
             timeout=60,
             headers=self._build_headers(),
+            params=self._build_params(),
         )
         if resp.status_code != 200:
             try:
