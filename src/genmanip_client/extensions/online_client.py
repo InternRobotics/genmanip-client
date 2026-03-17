@@ -59,6 +59,8 @@ class OnlineEvaluationClient:
         model_name: str | None = None,
         model_type: str | None = None,
         benchmark_set: str | None = None,
+        submitter_name: str | None = None,
+        submitter_homepage: str | None = None,
     ) -> dict:
         payload: dict[str, str] = {}
         if task_id:
@@ -69,6 +71,10 @@ class OnlineEvaluationClient:
             payload["model_type"] = model_type
         if benchmark_set:
             payload["benchmark_set"] = benchmark_set
+        if submitter_name:
+            payload["submitter_name"] = submitter_name
+        if submitter_homepage:
+            payload["submitter_homepage"] = submitter_homepage
         return self._post(
             DEFAULT_ONLINE_EVAL_CREATE_TASK_PATH,
             payload,

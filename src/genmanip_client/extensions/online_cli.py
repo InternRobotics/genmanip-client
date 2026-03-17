@@ -53,6 +53,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Benchmark set (e.g. EBench)",
     )
     online_create.add_argument(
+        "--submitter_name",
+        default=None,
+        help="Submitter or organization name",
+    )
+    online_create.add_argument(
+        "--submitter_homepage",
+        default=None,
+        help="Submitter homepage URL",
+    )
+    online_create.add_argument(
         "--timeout",
         type=float,
         default=30.0,
@@ -122,6 +132,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Benchmark set (e.g. EBench)",
     )
     online_submit.add_argument(
+        "--submitter_name",
+        default=None,
+        help="Submitter or organization name",
+    )
+    online_submit.add_argument(
+        "--submitter_homepage",
+        default=None,
+        help="Submitter homepage URL",
+    )
+    online_submit.add_argument(
         "--timeout",
         type=float,
         default=None,
@@ -156,6 +176,8 @@ def run(args: argparse.Namespace) -> int:
                 model_name=args.model_name,
                 model_type=args.model_type,
                 benchmark_set=args.benchmark_set,
+                submitter_name=args.submitter_name,
+                submitter_homepage=args.submitter_homepage,
             )
             print(json.dumps(resp, indent=2))
             return 0
@@ -169,6 +191,8 @@ def run(args: argparse.Namespace) -> int:
                 model_name=args.model_name,
                 model_type=args.model_type,
                 benchmark_set=args.benchmark_set,
+                submitter_name=args.submitter_name,
+                submitter_homepage=args.submitter_homepage,
             )
             create_data = (
                 create_resp.get("data", {}) if isinstance(create_resp, dict) else {}
