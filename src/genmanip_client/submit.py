@@ -271,15 +271,15 @@ def print_status(status: dict) -> None:
             )
         )
         print(make_box_line(" " * inner_width, inner_width, border_color=Colors.CYAN))
-        for task_name, sr in sorted(results.items()):
-            sr_color = Colors.BRIGHT_GREEN if sr >= 0.8 else Colors.YELLOW if sr >= 0.5 else Colors.RED
-            sr_bar_width = 15
-            sr_filled = int(sr_bar_width * sr)
-            sr_bar = colored("▓" * sr_filled, sr_color) + colored("░" * (sr_bar_width - sr_filled), Colors.DIM)
+        for task_name, score in sorted(results.items()):
+            score_color = Colors.BRIGHT_GREEN if score >= 0.8 else Colors.YELLOW if score >= 0.5 else Colors.RED
+            score_bar_width = 15
+            score_filled = int(score_bar_width * score)
+            score_bar = colored("▓" * score_filled, score_color) + colored("░" * (score_bar_width - score_filled), Colors.DIM)
             task_display = task_name[:20] + ".." if len(task_name) > 20 else task_name
-            sr_str = f"{sr:.2%}"
+            score_str = f"{score:.2%}"
             line_content = (
-                f" {task_display:<22} {sr_bar} {colored(sr_str, sr_color, Colors.BOLD)}"
+                f" {task_display:<22} {score_bar} {colored(score_str, score_color, Colors.BOLD)}"
             )
             print(make_box_line(line_content, inner_width, border_color=Colors.CYAN))
     else:

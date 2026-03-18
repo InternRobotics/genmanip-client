@@ -263,57 +263,59 @@ def _storage_worker_process(
                     robot_id=wobs.get("robot_id", None),
                 )
 
-    def save_episode_sr(episode_result: dict) -> None:
+    def save_episode_result(episode_result: dict) -> None:
         """Save episode success rate to disk."""
         episode_id = episode_result.get("episode_id")
         task_name = episode_result.get("task_name")
         seed = episode_result.get("seed")
+        score = episode_result.get("score")
         sr = episode_result.get("sr")
 
-        if episode_id is None or task_name is None or seed is None or sr is None:
+        if episode_id is None or task_name is None or seed is None or score is None or sr is None:
             return
 
         try:
+            score_value = float(score)
             sr_value = float(sr)
         except (TypeError, ValueError):
             return
 
         episode_dir = Path(log_dir) / str(episode_id)
         episode_dir.mkdir(parents=True, exist_ok=True)
-        episode_sr_path = episode_dir / "sr.json"
-        with episode_sr_path.open("w", encoding="utf-8") as f:
-            json.dump({"sr": sr_value}, f, indent=2)
+        episode_result_path = episode_dir / "result.json"
+        with episode_result_path.open("w", encoding="utf-8") as f:
+            json.dump({"score": score_value, "sr": sr_value}, f, indent=2)
 
         task_dir = episode_dir.parent
-        task_sr_path = task_dir / "episode_sr.json"
-        lock_path = task_sr_path.with_suffix(".lock")
+        task_result_path = task_dir / "episode_result.json"
+        lock_path = task_result_path.with_suffix(".lock")
 
         try:
             with SoftFileLock(lock_path, timeout=DEFAULT_STORAGE_LOCK_TIMEOUT):
-                task_sr = {}
+                task_result = {}
 
-                if task_sr_path.exists():
-                    with task_sr_path.open("r", encoding="utf-8") as f:
-                        task_sr = json.load(f)
+                if task_result_path.exists():
+                    with task_result_path.open("r", encoding="utf-8") as f:
+                        task_result = json.load(f)
 
-                task_sr[str(seed)] = sr_value
+                task_result[str(seed)] = {"score": score_value, "sr": sr_value}
 
-                dir_path = task_sr_path.parent
+                dir_path = task_result_path.parent
                 fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
                 try:
                     with os.fdopen(fd, "w", encoding="utf-8") as f:
-                        json.dump(task_sr, f, indent=2, sort_keys=True)
+                        json.dump(task_result, f, indent=2, sort_keys=True)
                         f.flush()
                         os.fsync(f.fileno())
 
-                    os.replace(tmp_path, task_sr_path)
+                    os.replace(tmp_path, task_result_path)
                 finally:
                     if os.path.exists(tmp_path):
                         os.remove(tmp_path)
         except Timeout:
             print(
                 "\033[33m⚠\033[0m "
-                f"[StorageWorker] Timeout acquiring episode_sr lock: {lock_path}"
+                f"[StorageWorker] Timeout acquiring episode_result lock: {lock_path}"
             )
             return
 
@@ -334,7 +336,7 @@ def _storage_worker_process(
             if task_type == "record":
                 process_record(task)
             elif task_type == "episode_result":
-                save_episode_sr(task["episode_result"])
+                save_episode_result(task["episode_result"])
         except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as e:
             print(
                 f"\033[31m✗\033[0m [StorageWorker] Error processing task {task_type}: {e}"
@@ -1070,7 +1072,8 @@ class EvalClient:
         print(colored(f"{Box.LT}{Box.H * (width - 2)}{Box.RT}", Colors.MAGENTA))
 
         # Metrics
-        for key, value in metrics.items():
+        for key, metric in metrics.items():
+            value = metric["score"]
 
             # Format value
             if isinstance(value, float):
