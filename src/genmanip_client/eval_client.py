@@ -100,6 +100,7 @@ DEFAULT_RESET_TIMEOUT = 600  # 10 minutes
 DEFAULT_CREATE_TIMEOUT = 600  # 10 minutes
 DEFAULT_HEALTH_CHECK_TIMEOUT = 5.0
 DEFAULT_STORAGE_LOCK_TIMEOUT = 5.0
+DEFAULT_RESET_POLL_INTERVAL = 0.2
 
 
 def _retry_on_failure(max_retries: int = 3, backoff: float = 1.0):
@@ -783,6 +784,76 @@ class EvalClient:
         print()
         return obs
 
+    def _get_pending_reset_results(self, worker_ids: list[str]) -> dict:
+        payload = pickle.dumps(
+            {"worker_ids": worker_ids}, protocol=pickle.HIGHEST_PROTOCOL
+        )
+        try:
+            resp = requests.post(
+                f"{self.base_url}/reset_result",
+                data=payload,
+                headers=self._build_headers(
+                    {"Content-Type": "application/octet-stream"}
+                ),
+                params=self._build_params(),
+                timeout=self.reset_timeout,
+            )
+        except requests.Timeout:
+            raise RuntimeError(
+                f"Reset result polling timed out after {self.reset_timeout}s"
+            )
+        except requests.RequestException as exc:
+            raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
+
+        if resp.status_code != 200:
+            try:
+                detail = resp.json()
+            except json.JSONDecodeError:
+                detail = resp.text
+            raise RuntimeError(
+                f"HTTP error on reset_result: {resp.status_code} - {detail}"
+            )
+
+        result_dict = pickle.loads(resp.content)
+        if not isinstance(result_dict, dict):
+            raise ValueError("reset_result response is not a dictionary")
+        return result_dict
+
+    def _resolve_pending_resets(self, obs_dict: dict) -> dict:
+        pending_worker_ids = [
+            str(worker_id)
+            for worker_id, worker_data in obs_dict.items()
+            if isinstance(worker_data, dict) and worker_data.get("reset_pending")
+        ]
+        if not pending_worker_ids:
+            return obs_dict
+
+        pending_worker_set = set(pending_worker_ids)
+        if self.verbose:
+            print_info(f"Polling reset result for workers: {sorted(pending_worker_set)}")
+
+        deadline = time.time() + self.reset_timeout
+        merged_obs = dict(obs_dict)
+        while pending_worker_set:
+            if time.time() > deadline:
+                raise RuntimeError(
+                    f"Timed out waiting for reset result after {self.reset_timeout}s"
+                )
+
+            polled_result = self._get_pending_reset_results(sorted(pending_worker_set))
+            for worker_id, worker_data in polled_result.items():
+                merged_obs[str(worker_id)] = worker_data
+                if (
+                    isinstance(worker_data, dict)
+                    and not worker_data.get("reset_pending")
+                ):
+                    pending_worker_set.discard(str(worker_id))
+
+            if pending_worker_set:
+                time.sleep(DEFAULT_RESET_POLL_INTERVAL)
+
+        return merged_obs
+
     def _step_single(self, action_dict: dict) -> tuple[dict, bool]:
         start = time.time()
         payload = pickle.dumps(action_dict, protocol=pickle.HIGHEST_PROTOCOL)
@@ -809,6 +880,9 @@ class EvalClient:
             raise RuntimeError(f"HTTP error from server: {resp.status_code} - {detail}")
 
         obs_dict = pickle.loads(resp.content)
+        if not isinstance(obs_dict, dict):
+            raise ValueError("Obs is not a dictionary")
+        obs_dict = self._resolve_pending_resets(obs_dict)
         done = self.handle_done(obs_dict)
         obs = deserialize_data(obs_dict)
         if not isinstance(obs, dict):
@@ -961,6 +1035,9 @@ class EvalClient:
 
         obs_dict = chunk_result["obs"]
         executed_steps = int(chunk_result.get("executed_steps", len(normalized_chunk)))
+        if not isinstance(obs_dict, dict):
+            raise ValueError("Obs is not a dictionary")
+        obs_dict = self._resolve_pending_resets(obs_dict)
         done = self.handle_done(obs_dict)
         obs = deserialize_data(obs_dict)
         if not isinstance(obs, dict):
@@ -1032,6 +1109,8 @@ class EvalClient:
 
     def handle_done(self, data: dict):
         for worker_id, wobs in data.items():
+            if wobs.get("reset_pending"):
+                continue
             if wobs.get("lock_lost"):
                 print_info(f"Worker {worker_id} lost lock; retrying with a new episode")
                 continue
