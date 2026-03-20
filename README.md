@@ -44,13 +44,107 @@ gmp submit configs/tasks/xxx.yml --host 127.0.0.1 --port 8087
 gmp eval --worker_ids 0,1 --host 127.0.0.1 --port 8087
 
 # Online evaluation: create and wait for endpoint, then eval
-GMP_ONLINE_URL=$(gmp online submit --base_url https://example.com --token YOUR_TOKEN --task_id T2025123100001 --model_name internVLA --model_type VLA --benchmark_set EBench --print_endpoint)
-gmp eval --url "$GMP_ONLINE_URL" --token YOUR_TOKEN
+resp=$(gmp online submit --base_url https://example.com --token YOUR_TOKEN --task_id T2025123100001 --model_name internVLA --model_type VLA --benchmark_set EBench --print_endpoint)
+GMP_ONLINE_URL=$(printf '%s' "$resp" | jq -r '.endpoint')
+TASK_ID=$(printf '%s' "$resp" | jq -r '.task_id')
+gmp eval --url "$GMP_ONLINE_URL" --run_id "$TASK_ID" --token YOUR_TOKEN
 
 # Leaderboard: list and submit
 gmp leaderboard list --project_root /path/to/GenManip-Sim
 gmp leaderboard submit --run_id RUN_ID -n "My Submission" -l "EBench" --project_root /path/to/GenManip-Sim --host localhost --port 8000 --user_token YOUR_TOKEN
 ```
+
+## Online Evaluation Workflow
+
+The current online flow is intended for users who run their VLA model locally and connect it to a remote GenManip evaluation service.
+
+### 1. Register on the platform
+
+Create an account on the web platform first, then obtain:
+
+- `base_url`: the online evaluation service URL
+- `token`: your API token
+
+### 2. Install the client
+
+```bash
+cd path/to/genmanip_client
+pip install -e .
+```
+
+If you want to parse the JSON result from `gmp online submit --print_endpoint` in shell, also install `jq`.
+
+### 3. Submit an online evaluation task
+
+`gmp online submit` creates the task and keeps polling until compute resources are assigned and the eval endpoint is ready.
+
+```bash
+gmp online submit \
+  --base_url https://example.com \
+  --token YOUR_TOKEN \
+  --task_id T2025123100001 \
+  --model_name internVLA \
+  --model_type VLA \
+  --benchmark_set EBench
+```
+
+Typical ready response:
+
+```json
+{
+  "task_id": "T2025123100001",
+  "endpoint": "https://example.com/eval/..."
+}
+```
+
+Notes:
+
+- `gmp online submit` waits and polls by default until the endpoint is ready.
+- Use `--print_endpoint` if you only want machine-readable output for shell capture.
+- `task_id` can be reused as the `run_id` of the eval client so the online platform and local eval run stay aligned.
+
+### 4. Start local evaluation with the returned endpoint
+
+Recommended shell workflow:
+
+```bash
+resp=$(gmp online submit \
+  --base_url https://example.com \
+  --token YOUR_TOKEN \
+  --task_id T2025123100001 \
+  --model_name internVLA \
+  --model_type VLA \
+  --benchmark_set EBench \
+  --print_endpoint)
+
+GMP_ONLINE_URL=$(printf '%s' "$resp" | jq -r '.endpoint')
+TASK_ID=$(printf '%s' "$resp" | jq -r '.task_id')
+
+gmp eval \
+  --url "$GMP_ONLINE_URL" \
+  --run_id "$TASK_ID" \
+  --token YOUR_TOKEN
+```
+
+If your policy supports action chunking, you can reduce request overhead with:
+
+```bash
+gmp eval \
+  --url "$GMP_ONLINE_URL" \
+  --run_id "$TASK_ID" \
+  --token YOUR_TOKEN \
+  --chunk_size 8
+```
+
+### Service-side note
+
+When launching the internal evaluation server, disable episode image dumping to avoid unnecessary overhead:
+
+```bash
+python ray_eval_server.py --episode_recorder_save_every 0
+```
+
+This is especially useful for online evaluation where saving images is usually not needed.
 
 ## 🖥️ Web Viewer (Headless-Friendly)
 
@@ -72,4 +166,3 @@ Optional flags:
 - `--web_view_port port` to set a port for web viewer display
 - `--web_view_interval N` to show one frame every N steps (default: 10)
 - `--web_view_scale S` to scale the preview (default: 1.0)
-
