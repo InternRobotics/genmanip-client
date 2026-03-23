@@ -232,6 +232,7 @@ def _storage_worker_process(
 
     def process_record(task: dict) -> None:
         """Process a recording task."""
+        process_start = time.time()
         obs = task["obs"]
         action_dict = task["action_dict"]
 
@@ -256,6 +257,7 @@ def _storage_worker_process(
                         frames_by_cam[cam_name] = v
 
             if frames_by_cam:
+                recorder_start = time.time()
                 recorders[wid].write_step(
                     episode_id=episode_id,
                     frames_by_cam=frames_by_cam,
@@ -263,6 +265,15 @@ def _storage_worker_process(
                     state=wobs,  # Pass the full observation dict as state
                     robot_id=wobs.get("robot_id", None),
                 )
+                recorder_elapsed = time.time() - recorder_start
+                if recorder_elapsed > 0.1:
+                    print_info(
+                        f"Storage recorder slow: worker={wid} episode={episode_id} "
+                        f"took {recorder_elapsed:.3f}s"
+                    )
+        total_elapsed = time.time() - process_start
+        if total_elapsed > 0.2:
+            print_info(f"Storage process_record took {total_elapsed:.3f}s")
 
     def save_episode_result(episode_result: dict) -> None:
         """Save episode success rate to disk."""
@@ -406,12 +417,15 @@ class StorageWorker:
 
     def enqueue_record(self, obs: dict, action_dict: dict) -> None:
         """Enqueue a recording task (non-blocking)."""
+        deepcopy_start = time.time()
         # Deep copy the data to avoid mutation issues
         obs_copy = self._deep_copy_obs(obs)
+        deepcopy_elapsed = time.time() - deepcopy_start
         action_copy = {k: v for k, v in action_dict.items()}
         # Increment pending counter before putting to queue
         with self._pending_counter.get_lock():
             self._pending_counter.value += 1
+        enqueue_start = time.time()
         self._queue.put(
             {
                 "type": "record",
@@ -419,6 +433,21 @@ class StorageWorker:
                 "action_dict": action_copy,
             }
         )
+        enqueue_elapsed = time.time() - enqueue_start
+        total_elapsed = deepcopy_elapsed + enqueue_elapsed
+        if total_elapsed > 0.05:
+            try:
+                queue_size = self._queue.qsize()
+            except (AttributeError, NotImplementedError, OSError):
+                queue_size = -1
+            queue_text = f"{queue_size}" if queue_size >= 0 else "n/a"
+            print_info(
+                "Storage enqueue timing: "
+                f"deepcopy={deepcopy_elapsed:.3f}s "
+                f"queue_put={enqueue_elapsed:.3f}s "
+                f"total={total_elapsed:.3f}s "
+                f"qsize={queue_text}"
+            )
 
     def enqueue_episode_result(self, episode_result: dict) -> None:
         """Enqueue an episode result saving task (non-blocking)."""
@@ -721,13 +750,20 @@ class EvalClient:
             self._storage_worker.enqueue_record(obs, action_dict)
 
     def _record_episode_results(self, obs: dict) -> None:
-        """Enqueue episode result saving to background storage worker (non-blocking)."""
+        """Persist episode results and optionally wait for storage backlog to drain."""
         if self._storage_worker is None:
             return
+        should_wait_for_drain = False
         for wdata in obs.values():
             episode_result = wdata.get("episode_result")
             if episode_result is not None and isinstance(episode_result, dict):
                 self._storage_worker.enqueue_episode_result(episode_result)
+                should_wait_for_drain = True
+        if should_wait_for_drain:
+            wait_start = time.time()
+            self._storage_worker.wait_until_done()
+            wait_elapsed = time.time() - wait_start
+            print_info(f"Storage queue drained before reset in {wait_elapsed:.3f}s")
 
     @_retry_on_failure(max_retries=3, backoff=1.0)
     def _create_workers(self):

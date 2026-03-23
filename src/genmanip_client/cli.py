@@ -5,7 +5,7 @@ import os
 import sys
 
 from .extensions import leaderboard_cli, online_cli
-from . import eval_cli, submit_cli, status_cli
+from . import eval_cli, plot_cli, submit_cli, status_cli
 
 def main(argv: list[str] | None = None) -> int:
     """
@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     # Core subcommands
     submit_cli.register(subparsers)
     eval_cli.register(subparsers)
+    plot_cli.register(subparsers)
     status_cli.register(subparsers)
 
     # Extension subcommands
@@ -51,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
         return submit_cli.run(args)
     elif args.command == "eval":
         return eval_cli.run(args)
+    elif args.command == "plot":
+        return plot_cli.run(args)
     elif args.command == "status":
         return status_cli.run(args)
     # Extension commands

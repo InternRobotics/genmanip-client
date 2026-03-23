@@ -1,4 +1,6 @@
+import json
 import os
+import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -119,9 +121,7 @@ def concat_cams_top(
 
 class StreamingEpisodeRecorder:
     """
-    Stream video writing per step:
-      - Top: concat multiple cameras horizontally
-      - Bottom: action plot (with vertical cursor at current time)
+    Stream video writing per step with lightweight metadata persistence.
     """
 
     def __init__(
@@ -154,11 +154,8 @@ class StreamingEpisodeRecorder:
         self._writer: cv2.VideoWriter | None = None
         self._episode_dir: str | None = None
         self._frame_dir: str | None = None
+        self._meta_fh: Any | None = None
         self._t = 0
-        self._actions: list[list[float]] = []
-        self._states: list[list[float]] = []
-        self._action_dim: int | None = None
-        self._state_dim: int | None = None
         self._frame_w: int | None = None
         self._frame_h: int | None = None
         self._current_episode: str | None = None
@@ -236,12 +233,15 @@ class StreamingEpisodeRecorder:
             self._frame_dir = os.path.join(self._episode_dir, self.frame_dir_name)
             Path(self._frame_dir).mkdir(parents=True, exist_ok=True)
 
-        final_h = top_h + self.plot_height
+        meta_path = os.path.join(self._episode_dir, "steps.jsonl")
+        self._meta_fh = open(meta_path, "a", encoding="utf-8")
+
+        final_h = top_h
         final_w = top_w
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         suffix = f"_{self.client_uid}" if self.client_uid else ""
-        out_path = os.path.join(self._episode_dir, f"merged_with_plot{suffix}.mp4")
+        out_path = os.path.join(self._episode_dir, f"merged{suffix}.mp4")
         self._writer = cv2.VideoWriter(out_path, fourcc, self.fps, (final_w, final_h))
 
         self._frame_w = final_w
@@ -255,156 +255,27 @@ class StreamingEpisodeRecorder:
     def _concat_cams_top(self, frames_by_cam: dict[str, np.ndarray]) -> np.ndarray:
         return concat_cams_top(frames_by_cam, self.cam_order)
 
-    def _render_plot_rgb(self) -> np.ndarray:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-
-        plot_w = int(self._frame_w or 640)
-        plot_h = int(self.plot_height)
-
-        if not getattr(self, "_actions", None) and not getattr(self, "_states", None):
-            return np.zeros((plot_h, plot_w, 3), dtype=np.uint8)
-
-        # Helper to plot data
-        def plot_data(ax_list, data_arr, t, title_prefix, cfg):
-            if data_arr.ndim != 2:
-                return
-
-            if cfg is None:
-                ax = ax_list[0]
-                ax.plot(data_arr)
-                ax.axvline(x=t, linewidth=2)
-                ax.set_title(f"{title_prefix} (dim={data_arr.shape[1]})")
-                ax.set_xlabel("step")
-                ax.set_ylabel("value")
-                ax.grid(True, alpha=0.2)
-                return
-
-            if cfg.is_dual_arm:
-                left_j = data_arr[:, cfg.left_arm_slice[0] : cfg.left_arm_slice[1]]
-                left_g = data_arr[:, cfg.left_gripper_slice[0] : cfg.left_gripper_slice[1]]
-
-                if cfg.right_arm_slice and cfg.right_gripper_slice:
-                    right_j = data_arr[:, cfg.right_arm_slice[0] : cfg.right_arm_slice[1]]
-                    right_g = data_arr[:, cfg.right_gripper_slice[0] : cfg.right_gripper_slice[1]]
-                else:
-                    right_j = None
-                    right_g = None
-
-                has_base = cfg.base_slice is not None
-                
-                # 1) joints
-                ax1 = ax_list[0]
-                ax1.plot(left_j, label="left")
-                if right_j is not None:
-                    ax1.plot(right_j, label="right", linestyle="--")
-                ax1.axvline(x=t, linewidth=2)
-                ax1.set_title(f"{title_prefix} Joints")
-                ax1.set_ylabel("joint")
-                ax1.grid(True, alpha=0.2)
-
-                # 2) grippers
-                ax2 = ax_list[1]
-                ax2.plot(left_g, label="left")
-                if right_g is not None:
-                    ax2.plot(right_g, label="right", linestyle="--")
-                ax2.axvline(x=t, linewidth=2)
-                ax2.set_title(f"{title_prefix} Grippers")
-                ax2.set_ylabel("grip")
-                ax2.grid(True, alpha=0.2)
-
-                # 3) base
-                if has_base and cfg.base_slice and len(ax_list) > 2:
-                    ax3 = ax_list[2]
-                    base = data_arr[:, cfg.base_slice[0] : cfg.base_slice[1]]
-                    ax3.plot(base)
-                    ax3.axvline(x=t, linewidth=2)
-                    ax3.set_title(f"{title_prefix} Base")
-                    ax3.set_xlabel("step")
-                    ax3.set_ylabel("base")
-                    ax3.grid(True, alpha=0.2)
-                else:
-                    ax2.set_xlabel("step")
-
-            else:
-                # Single arm
-                arm_j = data_arr[:, cfg.left_arm_slice[0] : cfg.left_arm_slice[1]]
-                gripper = data_arr[:, cfg.left_gripper_slice[0] : cfg.left_gripper_slice[1]]
-
-                ax1 = ax_list[0]
-                ax2 = ax_list[1]
-
-                ax1.plot(arm_j)
-                ax1.axvline(x=t, linewidth=2)
-                ax1.set_title(f"{title_prefix} Arm Joints")
-                ax1.set_ylabel("joint")
-                ax1.grid(True, alpha=0.2)
-
-                ax2.plot(gripper)
-                ax2.axvline(x=t, linewidth=2)
-                ax2.set_title(f"{title_prefix} Gripper")
-                ax2.set_xlabel("step")
-                ax2.set_ylabel("grip")
-                ax2.grid(True, alpha=0.2)
-
-        # Prepare data
-        actions_arr = np.asarray(self._actions, dtype=np.float32) if self._actions else None
-        states_arr = np.asarray(self._states, dtype=np.float32) if self._states else None
-        
-        t = 0
-        if actions_arr is not None and actions_arr.size > 0:
-            t = actions_arr.shape[0] - 1
-        elif states_arr is not None and states_arr.size > 0:
-            t = states_arr.shape[0] - 1
-
-        if self.robot_id is not None and self._robot_config is None:
-            self._robot_config = get_robot_action_config(self.robot_id)
-        cfg = self._robot_config
-
-        dpi = 100
-        fig_w_in = plot_w / dpi
-        fig_h_in = plot_h / dpi
-
-        # Determine layout
-        has_states = states_arr is not None and states_arr.size > 0
-        has_actions = actions_arr is not None and actions_arr.size > 0
-        
-        cols = 2 if (has_states and has_actions) else 1
-        
-        if cfg is None:
-            rows = 1
-        elif cfg.is_dual_arm and cfg.base_slice:
-            rows = 3
-        else:
-            rows = 2
-            
-        fig = plt.figure(figsize=(fig_w_in, fig_h_in), dpi=dpi)
-        gs = fig.add_gridspec(rows, cols)
-
-        if has_states:
-            col_idx = 0
-            ax_list = [fig.add_subplot(gs[i, col_idx]) for i in range(rows)]
-            plot_data(ax_list, states_arr, t, "State", cfg)
-            
-        if has_actions:
-            col_idx = 1 if has_states else 0
-            ax_list = [fig.add_subplot(gs[i, col_idx]) for i in range(rows)]
-            plot_data(ax_list, actions_arr, t, "Pred Action", cfg)
-
-        fig.tight_layout(pad=0.4)
-
-        fig.canvas.draw()
-        rgba = np.asarray(fig.canvas.buffer_rgba())
-        rgb = rgba[:, :, :3].copy()
-
-        plt.close(fig)
-
-        if rgb.shape[0] != plot_h or rgb.shape[1] != plot_w:
-            rgb = cv2.resize(rgb, (plot_w, plot_h), interpolation=cv2.INTER_AREA)
-
-        return rgb
+    def _append_step_metadata(
+        self,
+        *,
+        episode_id: str,
+        action: Any,
+        state: Any,
+        frames_by_cam: dict[str, np.ndarray],
+    ) -> None:
+        if self._meta_fh is None:
+            return
+        state_vec = self._process_state(state) if isinstance(state, dict) else []
+        record = {
+            "episode_id": episode_id,
+            "step": self._t,
+            "robot_id": self.robot_id,
+            "camera_names": sorted(frames_by_cam.keys()),
+            "action": self._flatten_action(action),
+            "state": state_vec,
+        }
+        self._meta_fh.write(json.dumps(record, ensure_ascii=True) + "\n")
+        self._meta_fh.flush()
 
     # ---------- public API ----------
     def write_step(
@@ -419,8 +290,11 @@ class StreamingEpisodeRecorder:
         frames_by_cam: {cam_name: RGB uint8 ndarray(H,W,3)}
         action: your action dict (nested ok)
         """
+        total_start = time.time()
         if robot_id is not None:
             self.robot_id = robot_id
+            self._robot_config = get_robot_action_config(robot_id)
+        concat_start = time.time()
         top = self._concat_cams_top(frames_by_cam)
         if self.video_scale != 1.0:
             h, w = top.shape[:2]
@@ -428,51 +302,25 @@ class StreamingEpisodeRecorder:
             new_h = max(2, int(h * self.video_scale))
             top = cv2.resize(top, (new_w, new_h), interpolation=cv2.INTER_AREA)
         top_h, top_w = top.shape[:2]
+        concat_elapsed = time.time() - concat_start
 
         # initialize writer once
         self._ensure_writer(episode_id, top_h, top_w)
 
-        # record action (keep only numeric history, not images)
-        flat = self._flatten_action(action)
-
-        if flat:
-            if self._action_dim is None:
-                self._action_dim = len(flat)
-            # If dim changes, truncate to min to avoid plot crash
-            d = min(len(flat), self._action_dim)
-            flat = flat[:d]
-            self._actions.append(flat)
-        else:
-            # still advance timeline with zeros if you want; here we keep cursor consistent
-            if self._action_dim is not None:
-                self._actions.append([0.0] * self._action_dim)
-
-        # record state
-        if isinstance(state, dict):
-            state_vec = self._process_state(state)
-        else:
-            state_vec = []
-            
-        if state_vec:
-            if self._state_dim is None:
-                self._state_dim = len(state_vec)
-            d = min(len(state_vec), self._state_dim)
-            state_vec = state_vec[:d]
-            self._states.append(state_vec)
-        else:
-            if self._state_dim is not None:
-                self._states.append([0.0] * self._state_dim)
-
-        plot = self._render_plot_rgb()
-
-        # Compose final frame: top + plot (both RGB)
-        final_rgb = cv2.vconcat([top, plot])
-
         # write expects BGR
-        final_bgr = cv2.cvtColor(final_rgb, cv2.COLOR_RGB2BGR)
+        meta_start = time.time()
+        self._append_step_metadata(
+            episode_id=episode_id,
+            action=action,
+            state=state,
+            frames_by_cam=frames_by_cam,
+        )
+        meta_elapsed = time.time() - meta_start
+        final_bgr = cv2.cvtColor(top, cv2.COLOR_RGB2BGR)
 
         if self._writer is None:
             raise RuntimeError("VideoWriter not initialized (unexpected).")
+        write_start = time.time()
         self._writer.write(final_bgr)
 
         if (
@@ -482,18 +330,28 @@ class StreamingEpisodeRecorder:
         ):
             frame_path = os.path.join(self._frame_dir, f"frame_{self._t + 1:06d}.png")
             cv2.imwrite(frame_path, final_bgr)
+        write_elapsed = time.time() - write_start
 
         self._t += 1
+        total_elapsed = time.time() - total_start
+        if total_elapsed > 0.1:
+            print(
+                "[RecorderTiming] "
+                f"episode={episode_id} step={self._t} "
+                f"concat={concat_elapsed:.3f}s "
+                f"meta={meta_elapsed:.3f}s "
+                f"write={write_elapsed:.3f}s "
+                f"total={total_elapsed:.3f}s"
+            )
 
     def close(self):
         if self._writer is not None:
             self._writer.release()
             self._writer = None
+        if self._meta_fh is not None:
+            self._meta_fh.close()
+            self._meta_fh = None
         self._t = 0
-        self._actions.clear()
-        self._states.clear()
-        self._action_dim = None
-        self._state_dim = None
         self._frame_w = None
         self._frame_h = None
         self._episode_dir = None
