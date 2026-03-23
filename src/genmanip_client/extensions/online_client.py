@@ -61,8 +61,9 @@ class OnlineEvaluationClient:
         benchmark_set: str | None = None,
         submitter_name: str | None = None,
         submitter_homepage: str | None = None,
+        is_public: int | None = None,
     ) -> dict:
-        payload: dict[str, str] = {}
+        payload: dict[str, str | int] = {}
         if task_id:
             payload["task_id"] = task_id
         if model_name:
@@ -75,6 +76,8 @@ class OnlineEvaluationClient:
             payload["submitter_name"] = submitter_name
         if submitter_homepage:
             payload["submitter_homepage"] = submitter_homepage
+        if is_public is not None:
+            payload["is_public"] = is_public
         return self._post(
             DEFAULT_ONLINE_EVAL_CREATE_TASK_PATH,
             payload,

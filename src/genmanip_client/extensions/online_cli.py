@@ -63,6 +63,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Submitter homepage URL",
     )
     online_create.add_argument(
+        "--is_public",
+        type=int,
+        choices=[0, 1],
+        default=None,
+        help="Whether the task is public: 0 for no, 1 for yes",
+    )
+    online_create.add_argument(
         "--timeout",
         type=float,
         default=30.0,
@@ -142,6 +149,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Submitter homepage URL",
     )
     online_submit.add_argument(
+        "--is_public",
+        type=int,
+        choices=[0, 1],
+        default=None,
+        help="Whether the task is public: 0 for no, 1 for yes",
+    )
+    online_submit.add_argument(
         "--timeout",
         type=float,
         default=None,
@@ -178,6 +192,7 @@ def run(args: argparse.Namespace) -> int:
                 benchmark_set=args.benchmark_set,
                 submitter_name=args.submitter_name,
                 submitter_homepage=args.submitter_homepage,
+                is_public=args.is_public,
             )
             print(json.dumps(resp, indent=2))
             return 0
@@ -193,6 +208,7 @@ def run(args: argparse.Namespace) -> int:
                 benchmark_set=args.benchmark_set,
                 submitter_name=args.submitter_name,
                 submitter_homepage=args.submitter_homepage,
+                is_public=args.is_public,
             )
             create_data = (
                 create_resp.get("data", {}) if isinstance(create_resp, dict) else {}
