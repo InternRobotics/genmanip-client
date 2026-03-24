@@ -72,6 +72,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Save one image every N steps (0 disables, default: 0)",
     )
     eval_parser.add_argument(
+        "--plot_on_episode_end",
+        action="store_true",
+        help="Run 'gmp plot' asynchronously after each finished episode",
+    )
+    eval_parser.add_argument(
         "--chunk_size",
         type=int,
         default=1,

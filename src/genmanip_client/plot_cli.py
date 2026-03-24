@@ -3,7 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import sys
+import tempfile
+import time
 
 import numpy as np
 
@@ -224,6 +228,51 @@ def _build_output_video_path(source_video: Path, prefix: str) -> Path:
     return source_video.with_name(f"{prefix}merged_with_plot{suffix}.mp4")
 
 
+def _ffmpeg_path() -> str | None:
+    return shutil.which("ffmpeg")
+
+
+def _run_ffmpeg(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        cmd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _transcode_to_compatible_mp4(
+    source_video: Path,
+    output_video: Path,
+) -> None:
+    ffmpeg = _ffmpeg_path()
+    if ffmpeg is None:
+        raise RuntimeError("ffmpeg not found in PATH")
+
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-i",
+        str(source_video),
+        "-an",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-vf",
+        "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+        str(output_video),
+    ]
+    result = _run_ffmpeg(cmd)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise RuntimeError(
+            f"ffmpeg transcode failed for {source_video}: {detail or 'unknown error'}"
+        )
+
+
 def _write_plot_video(
     *,
     episode_dir: Path,
@@ -249,10 +298,18 @@ def _write_plot_video(
     out_h = height + int(plot_height)
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(str(out_video), fourcc, fps, (width, out_h))
+    temp_output = out_video
+    temp_dir_obj: tempfile.TemporaryDirectory[str] | None = None
+    if _ffmpeg_path() is not None:
+        temp_dir_obj = tempfile.TemporaryDirectory(prefix="gmp_plot_")
+        temp_output = Path(temp_dir_obj.name) / out_video.name
+
+    writer = cv2.VideoWriter(str(temp_output), fourcc, fps, (width, out_h))
     if not writer.isOpened():
         cap.release()
-        raise RuntimeError(f"Failed to open output video writer: {out_video}")
+        if temp_dir_obj is not None:
+            temp_dir_obj.cleanup()
+        raise RuntimeError(f"Failed to open output video writer: {temp_output}")
 
     frame_idx = 0
 
@@ -294,11 +351,24 @@ def _write_plot_video(
             print_progress(frame_idx)
             print(file=sys.stderr, flush=True)
 
-    print(f"Wrote {out_video}")
+    try:
+        if temp_output != out_video:
+            _transcode_to_compatible_mp4(temp_output, out_video)
+            print(f"Wrote compatible plot video {out_video}")
+        else:
+            print(f"Wrote {out_video}")
+    finally:
+        if temp_dir_obj is not None:
+            temp_dir_obj.cleanup()
 
 
 def run(args: argparse.Namespace) -> int:
+    start_time = time.time()
     episode_dir = Path(args.episode_dir).expanduser().resolve()
+    print(
+        f"[gmp plot] start episode_dir={episode_dir} "
+        f"at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+    )
     rows, robot_id = _load_steps(episode_dir)
     cfg = ROBOT_ACTION_CONFIGS.get(robot_id) if robot_id else None
 
@@ -336,5 +406,10 @@ def run(args: argparse.Namespace) -> int:
         state_arr=state_arr,
         cfg=cfg,
         plot_height=int(args.plot_height),
+    )
+    elapsed = time.time() - start_time
+    print(
+        f"[gmp plot] done episode_dir={episode_dir} "
+        f"elapsed={elapsed:.2f}s"
     )
     return 0

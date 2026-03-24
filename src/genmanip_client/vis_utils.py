@@ -239,9 +239,9 @@ class StreamingEpisodeRecorder:
         final_h = top_h
         final_w = top_w
 
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         suffix = f"_{self.client_uid}" if self.client_uid else ""
         out_path = os.path.join(self._episode_dir, f"merged{suffix}.mp4")
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         self._writer = cv2.VideoWriter(out_path, fourcc, self.fps, (final_w, final_h))
 
         self._frame_w = final_w
@@ -357,3 +357,9 @@ class StreamingEpisodeRecorder:
         self._episode_dir = None
         self._frame_dir = None
         self._current_episode = None
+
+    def close_episode(self, episode_id: str) -> bool:
+        if self._current_episode != episode_id:
+            return False
+        self.close()
+        return True

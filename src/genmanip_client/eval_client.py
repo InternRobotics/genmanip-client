@@ -9,6 +9,7 @@ import os
 import queue
 import threading
 import sys
+import subprocess
 from functools import wraps
 from pathlib import Path
 import pickle
@@ -206,6 +207,7 @@ def _storage_worker_process(
     robot_id: str | None,
     frame_save_interval: int,
     client_uid: str,
+    plot_on_episode_end: bool,
 ) -> None:
     """
     Worker process function for async storage operations.
@@ -229,6 +231,45 @@ def _storage_worker_process(
             robot_id=robot_id,
             frame_save_interval=frame_save_interval,
         )
+
+    def spawn_episode_plot(episode_dir: Path) -> None:
+        log_path = episode_dir / "plot.log"
+        package_src_dir = Path(__file__).resolve().parents[1]
+        env = os.environ.copy()
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            f"{package_src_dir}{os.pathsep}{existing_pythonpath}"
+            if existing_pythonpath
+            else str(package_src_dir)
+        )
+        try:
+            with log_path.open("ab") as log_fh:
+                spawn_time = time.strftime("%Y-%m-%d %H:%M:%S")
+                log_fh.write(
+                    f"[StorageWorker][{spawn_time}] spawn plot for {episode_dir}\n".encode(
+                        "utf-8"
+                    )
+                )
+                log_fh.flush()
+                subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "genmanip_client",
+                        "plot",
+                        str(episode_dir),
+                    ],
+                    stdout=log_fh,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    cwd=str(package_src_dir),
+                    env=env,
+                )
+        except OSError as exc:
+            print(
+                "\033[33m⚠\033[0m "
+                f"[StorageWorker] Failed to spawn plot process for {episode_dir}: {exc}"
+            )
 
     def process_record(task: dict) -> None:
         """Process a recording task."""
@@ -282,6 +323,7 @@ def _storage_worker_process(
         seed = episode_result.get("seed")
         score = episode_result.get("score")
         sr = episode_result.get("sr")
+        worker_id = episode_result.get("worker_id")
 
         if episode_id is None or task_name is None or seed is None or score is None or sr is None:
             return
@@ -292,7 +334,7 @@ def _storage_worker_process(
         except (TypeError, ValueError):
             return
 
-        episode_dir = Path(log_dir) / str(episode_id)
+        episode_dir = (Path(log_dir) / str(episode_id)).resolve()
         episode_dir.mkdir(parents=True, exist_ok=True)
         episode_result_path = episode_dir / "result.json"
         with episode_result_path.open("w", encoding="utf-8") as f:
@@ -330,6 +372,14 @@ def _storage_worker_process(
                 f"[StorageWorker] Timeout acquiring episode_result lock: {lock_path}"
             )
             return
+
+        if isinstance(worker_id, str):
+            recorder = recorders.get(worker_id)
+            if recorder is not None:
+                recorder.close_episode(str(episode_id))
+
+        if plot_on_episode_end:
+            spawn_episode_plot(episode_dir)
 
     # Main loop
     while not done_event.is_set():
@@ -379,6 +429,7 @@ class StorageWorker:
         robot_id: str | None,
         frame_save_interval: int,
         client_uid: str,
+        plot_on_episode_end: bool,
     ):
         self.log_dir = log_dir
         self.worker_ids = worker_ids
@@ -387,6 +438,7 @@ class StorageWorker:
         self.robot_id = robot_id
         self.frame_save_interval = frame_save_interval
         self.client_uid = client_uid
+        self.plot_on_episode_end = plot_on_episode_end
 
         # Use multiprocessing primitives
         self._queue = multiprocessing.Queue()
@@ -410,6 +462,7 @@ class StorageWorker:
                 self.robot_id,
                 self.frame_save_interval,
                 self.client_uid,
+                self.plot_on_episode_end,
             ),
             daemon=True,
         )
@@ -539,6 +592,7 @@ class EvalClient:
         web_view_interval: int = 10,
         web_view_scale: float = 1.0,
         frame_save_interval: int = 0,
+        plot_on_episode_end: bool = False,
     ):
         # Print startup banner
         self.verbose = verbose
@@ -566,7 +620,11 @@ class EvalClient:
         self.reset_timeout = reset_timeout
         self.run_id = run_id
         self.client_uid = uuid.uuid4().hex[:8]
-        self.log_dir = os.environ.get("GENMANIP_RESULT_DIR", "client_results")
+        self.log_dir = str(
+            Path(os.environ.get("GENMANIP_RESULT_DIR", "client_results"))
+            .expanduser()
+            .resolve()
+        )
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
         print_info(f"Results directory: {colored(self.log_dir, Colors.CYAN)}")
         print_info(f"Client UID: {colored(self.client_uid, Colors.CYAN)}")
@@ -600,6 +658,7 @@ class EvalClient:
                 robot_id=self.robot_id,
                 frame_save_interval=frame_save_interval,
                 client_uid=self.client_uid,
+                plot_on_episode_end=plot_on_episode_end,
             )
 
         self.step_count = 0
@@ -616,6 +675,7 @@ class EvalClient:
             self._start_web_viewer()
         print_info(f"Connected to server: {colored(base_url, Colors.CYAN)}")
         print_info(f"Workers: {colored(str(self.worker_ids), Colors.YELLOW)}")
+        print_info(f"Plot on episode end: {colored(str(plot_on_episode_end), Colors.YELLOW)}")
         print()
 
     def _start_web_viewer(self) -> None:
@@ -754,10 +814,12 @@ class EvalClient:
         if self._storage_worker is None:
             return
         should_wait_for_drain = False
-        for wdata in obs.values():
+        for worker_id, wdata in obs.items():
             episode_result = wdata.get("episode_result")
             if episode_result is not None and isinstance(episode_result, dict):
-                self._storage_worker.enqueue_episode_result(episode_result)
+                episode_result_with_worker = episode_result.copy()
+                episode_result_with_worker["worker_id"] = str(worker_id)
+                self._storage_worker.enqueue_episode_result(episode_result_with_worker)
                 should_wait_for_drain = True
         if should_wait_for_drain:
             wait_start = time.time()
@@ -1373,6 +1435,7 @@ def run_cli(args: argparse.Namespace) -> int:
         web_view_interval=getattr(args, "web_view_interval", 10),
         web_view_scale=getattr(args, "web_view_scale", 1.0),
         frame_save_interval=getattr(args, "frame_save_interval", 0),
+        plot_on_episode_end=getattr(args, "plot_on_episode_end", False),
     )
     chunk_size = int(getattr(args, "chunk_size", 1))
     if chunk_size < 1:

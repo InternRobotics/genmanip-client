@@ -29,6 +29,7 @@ gmp --help
 
 - `gmp submit <config_paths...>`: Submit evaluation jobs to the server.
 - `gmp eval`: Run the eval client (legacy behavior of `genmanip-client`).
+- `gmp plot <episode_dir>`: Generate action/state plots and a merged plot video for one episode.
 - `gmp status`: Get current job status from the server.
 - `gmp online create`: Create an online evaluation task.
 - `gmp online ready`: Check if an online evaluation task is ready.
@@ -42,6 +43,12 @@ gmp submit configs/tasks/xxx.yml --host 127.0.0.1 --port 8087
 
 # Run eval client
 gmp eval --worker_ids 0,1 --host 127.0.0.1 --port 8087
+
+# Run eval client and auto-generate plots after each finished episode
+gmp eval --worker_ids 0,1 --host 127.0.0.1 --port 8087 --plot_on_episode_end
+
+# Generate plots for an existing episode directory
+gmp plot client_results/<benchmark>/<run_id>/<task>/<seed>
 
 # Online evaluation: create and wait for endpoint, then eval
 resp=$(gmp online submit --base_url https://example.com --token YOUR_TOKEN --task_id T2025123100001 --model_name internVLA --model_type VLA --benchmark_set EBench --print_endpoint)
@@ -166,3 +173,32 @@ Optional flags:
 - `--web_view_port port` to set a port for web viewer display
 - `--web_view_interval N` to show one frame every N steps (default: 10)
 - `--web_view_scale S` to scale the preview (default: 1.0)
+
+## Plotting Episode Results
+
+Use `gmp plot` to post-process one saved episode directory:
+
+```bash
+gmp plot client_results/<benchmark>/<run_id>/<task>/<seed>
+```
+
+It reads:
+
+- `steps.jsonl` for action/state traces
+- `merged*.mp4` for the recorded client video
+
+And writes:
+
+- `action_plot.png`
+- `state_plot.png`
+- `merged_with_plot*.mp4`
+
+If `ffmpeg` is available, the final plot video is transcoded to H.264 with `yuv420p` and `faststart` for better playback compatibility.
+
+To generate these plots automatically at episode end during evaluation:
+
+```bash
+gmp eval --plot_on_episode_end
+```
+
+This launches `gmp plot` asynchronously after each finished episode and writes logs to `plot.log` inside the episode directory.
