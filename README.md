@@ -31,6 +31,7 @@ gmp --help
 - `gmp eval`: Run the eval client (legacy behavior of `genmanip-client`).
 - `gmp plot <episode_dir>`: Generate action/state plots and a merged plot video for one episode.
 - `gmp status`: Get current job status from the server.
+- `gmp clean`: Clean generated mesh cache, eval results, logs, and recursive lock/tmp leftovers.
 - `gmp online create`: Create an online evaluation task.
 - `gmp online ready`: Check if an online evaluation task is ready.
 - `gmp online submit`: Create an online evaluation task and poll until ready.
@@ -43,6 +44,15 @@ gmp submit configs/tasks/xxx.yml --host 127.0.0.1 --port 8087
 
 # Run eval client
 gmp eval --worker_ids 0,1 --host 127.0.0.1 --port 8087
+
+# Preview cleanup targets
+gmp clean --dry-run
+
+# Remove generated mesh cache, eval results, logs, and lock/tmp files
+gmp clean
+
+# Also remove downloaded benchmark package cache
+gmp clean --all
 
 # Run eval client and auto-generate plots after each finished episode
 gmp eval --worker_ids 0,1 --host 127.0.0.1 --port 8087 --plot_on_episode_end
@@ -152,6 +162,23 @@ python ray_eval_server.py --episode_recorder_save_every 0
 ```
 
 This is especially useful for online evaluation where saving images is usually not needed.
+
+## Cleanup
+
+`gmp clean` is intended to remove hard-to-notice runtime byproducts rather than user-facing client outputs.
+
+By default it removes:
+
+- `saved/assets/mesh_data`
+- `saved/eval_results`
+- `logs`
+- Recursive `*.lock`, `*_soft.lock`, `*.tmp`, and `*.tmp-*` files under the workspace
+
+By default it keeps:
+
+- `client_results`
+- `saved/tasks`
+- `saved/demonstrations`
 
 ## 🖥️ Web Viewer (Headless-Friendly)
 

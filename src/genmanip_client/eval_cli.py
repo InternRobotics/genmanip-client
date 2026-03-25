@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 
-from .eval_client import run_cli as run_eval_cli
-
 
 def register(subparsers: argparse._SubParsersAction) -> None:
     eval_parser = subparsers.add_parser(
@@ -85,4 +83,6 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
+    from .eval_client import run_cli as run_eval_cli
+
     return run_eval_cli(args)

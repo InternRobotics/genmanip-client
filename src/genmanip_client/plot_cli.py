@@ -6,12 +6,16 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from typing import TYPE_CHECKING, Any
 import tempfile
 import time
 
 import numpy as np
 
-from .vis_utils import ROBOT_ACTION_CONFIGS, RobotActionConfig
+if TYPE_CHECKING:
+    from .vis_utils import RobotActionConfig
+else:
+    RobotActionConfig = Any
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -363,6 +367,8 @@ def _write_plot_video(
 
 
 def run(args: argparse.Namespace) -> int:
+    from .vis_utils import ROBOT_ACTION_CONFIGS
+
     start_time = time.time()
     episode_dir = Path(args.episode_dir).expanduser().resolve()
     print(

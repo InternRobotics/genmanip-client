@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import os
 import sys
 
-from .extensions import leaderboard_cli, online_cli
-from . import eval_cli, plot_cli, submit_cli, status_cli
+def _load_module(module_name: str):
+    return importlib.import_module(module_name, package=__package__)
 
 def main(argv: list[str] | None = None) -> int:
     """
@@ -26,15 +27,16 @@ def main(argv: list[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Core subcommands
-    submit_cli.register(subparsers)
-    eval_cli.register(subparsers)
-    plot_cli.register(subparsers)
-    status_cli.register(subparsers)
+    _load_module(".submit_cli").register(subparsers)
+    _load_module(".eval_cli").register(subparsers)
+    _load_module(".plot_cli").register(subparsers)
+    _load_module(".status_cli").register(subparsers)
+    _load_module(".clean_cli").register(subparsers)
 
     # Extension subcommands
-    online_cli.register(subparsers)
+    _load_module(".extensions.online_cli").register(subparsers)
     if os.environ.get("GENMANIP_ENABLE_INTERNAL") == "1":
-        leaderboard_cli.register(subparsers)
+        _load_module(".extensions.leaderboard_cli").register(subparsers)
 
     # Parse arguments
     args = parser.parse_args(argv)
@@ -49,18 +51,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "submit":
-        return submit_cli.run(args)
+        return _load_module(".submit_cli").run(args)
     elif args.command == "eval":
-        return eval_cli.run(args)
+        return _load_module(".eval_cli").run(args)
     elif args.command == "plot":
-        return plot_cli.run(args)
+        return _load_module(".plot_cli").run(args)
     elif args.command == "status":
-        return status_cli.run(args)
+        return _load_module(".status_cli").run(args)
+    elif args.command == "clean":
+        return _load_module(".clean_cli").run(args)
     # Extension commands
     elif args.command == "online":
-        return online_cli.run(args)
+        return _load_module(".extensions.online_cli").run(args)
     elif args.command == "leaderboard":
-        return leaderboard_cli.run(args)
+        return _load_module(".extensions.leaderboard_cli").run(args)
     else:
         parser.print_help()
         return 1
