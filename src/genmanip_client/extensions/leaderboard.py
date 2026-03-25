@@ -2,20 +2,51 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
+import zipfile
+from pathlib import Path
 from typing import Any
 
+import urllib3
 import requests
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 DEFAULT_USER_TOKEN = os.getenv("USER_TOKEN", None)
 DEFAULT_LEADERBOARD_HOST = os.getenv("LEADERBOARD_HOST", "localhost")
 DEFAULT_LEADERBOARD_PORT = int(os.getenv("LEADERBOARD_PORT", 8000))
+
+# Extensions skipped by default; use --include-videos to also include them
+_SKIP_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".rrd"}
+# Always skip these filenames
+_SKIP_NAMES = {"submitted.flag"}
+# Always skip filenames with these prefixes
+_SKIP_PREFIXES = ("compress_",)
 
 
 def resolve_project_root(project_root: str | None) -> str:
     if project_root:
         return os.path.abspath(project_root)
     return os.path.abspath(os.getcwd())
+
+
+def _create_selective_zip(results_dir, zip_base_path, include_videos=False):
+    """Create a selective ZIP of results_dir, skipping video files unless include_videos=True."""
+    archive_path = zip_base_path + ".zip"
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for dirpath, dirnames, filenames in os.walk(results_dir):
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            for filename in filenames:
+                if filename in _SKIP_NAMES:
+                    continue
+                if any(filename.startswith(p) for p in _SKIP_PREFIXES):
+                    continue
+                ext = os.path.splitext(filename)[1].lower()
+                if not include_videos and ext in _SKIP_EXTENSIONS:
+                    continue
+                filepath = os.path.join(dirpath, filename)
+                arcname = os.path.relpath(filepath, results_dir)
+                zf.write(filepath, arcname)
+    return archive_path
 
 
 def upload_submission(
@@ -25,10 +56,8 @@ def upload_submission(
     author_token: str,
     submission_infos: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """
-    Upload a submission to the leaderboard server.
-    """
-    url = f"http://{host_ip}:{port}/api/upload"
+    """Upload a submission ZIP to the leaderboard server."""
+    url = f"https://{host_ip}:{port}/api/upload"
 
     if not os.path.exists(submission_file_path):
         print(f"Error: File {submission_file_path} does not exist.")
@@ -38,10 +67,11 @@ def upload_submission(
     leaderboard_name = submission_infos.get("leaderboard_name")
 
     if not submission_name or not leaderboard_name:
-        print(
-            "Error: submission_infos must contain 'submission_name' and 'leaderboard_name'."
-        )
+        print("Error: submission_infos must contain 'submission_name' and 'leaderboard_name'.")
         return None
+
+    file_size_mb = os.path.getsize(submission_file_path) / (1024 * 1024)
+    print(f"Upload size: {file_size_mb:.1f} MB")
 
     data = {
         "submission_name": submission_name,
@@ -59,17 +89,19 @@ def upload_submission(
                     "application/zip",
                 )
             }
-            response = requests.post(url, files=files, data=data, timeout=(30, 300))
+            read_timeout = max(600, int(file_size_mb * 0.6))
+            response = requests.post(
+                url, files=files, data=data,
+                timeout=(30, read_timeout),
+                verify=False,
+                proxies={"http": None, "https": None},
+            )
         response.raise_for_status()
         result = response.json()
 
         if result.get("status") == "success":
-            print(
-                f"Successfully uploaded! Submission ID: {result.get('submission_id')}"
-            )
-            print(
-                f"Check status at: http://{host_ip}:{port}/upload_status/{result.get('submission_id')}"
-            )
+            print(f"Successfully uploaded! Submission ID: {result.get('submission_id')}")
+            print(f"Check status at: https://{host_ip}:{port}/upload_status/{result.get('submission_id')}")
         else:
             print(f"Upload failed: {result.get('error')}")
 
@@ -95,7 +127,6 @@ def list_results(project_root: str | None) -> None:
             benchmark_dir = os.path.join(base_results_dir, benchmark_id)
             if not os.path.isdir(benchmark_dir):
                 continue
-
             for run_id in os.listdir(benchmark_dir):
                 run_dir = os.path.join(benchmark_dir, run_id)
                 if os.path.isdir(run_dir):
@@ -115,7 +146,6 @@ def list_results(project_root: str | None) -> None:
         GREEN = "\033[92m"
         RED = "\033[91m"
         RESET = "\033[0m"
-
         print(f"{'Benchmark ID':<30} {'Run ID':<40} {'Submitted':<15} {'Path'}")
         print("-" * 150)
         results = sorted(results, key=lambda x: (x["benchmark_id"], x["run_id"]))
@@ -123,9 +153,7 @@ def list_results(project_root: str | None) -> None:
         for item in results:
             submitted = item.get("submitted", False)
             status = f"{GREEN}Yes{RESET}" if submitted else f"{RED}No{RESET}"
-            print(
-                f"{item['benchmark_id']:<30} {item['run_id']:<40} {status:<24} {item['path']}"
-            )
+            print(f"{item['benchmark_id']:<30} {item['run_id']:<40} {status:<24} {item['path']}")
 
 
 def submit_results(
@@ -137,6 +165,7 @@ def submit_results(
     port: int,
     project_root: str | None,
     benchmark_id: str | None = None,
+    include_videos: bool = False,
 ) -> None:
     root = resolve_project_root(project_root)
     if benchmark_id:
@@ -162,19 +191,15 @@ def submit_results(
     }
 
     print(f"Submitting run {run_id} to {leaderboard_name} at {host}:{port}...")
+    if not include_videos:
+        print("Note: skipping video files (use --include-videos to include them)")
 
     zip_filename = f"results_{run_id}"
     zip_base_path = os.path.join(os.path.dirname(results_dir), zip_filename)
-    archive_path = shutil.make_archive(zip_base_path, "zip", results_dir)
+    archive_path = _create_selective_zip(results_dir, zip_base_path, include_videos=include_videos)
 
     try:
-        result = upload_submission(
-            host,
-            port,
-            archive_path,
-            user_token,
-            submission_info,
-        )
+        result = upload_submission(host, port, archive_path, user_token, submission_info)
 
         if result and result.get("status") == "success":
             submitted_flag_path = os.path.join(results_dir, "submitted.flag")
@@ -182,7 +207,6 @@ def submit_results(
                 json.dump(submission_info, f, indent=4)
         else:
             print("Submission failed.")
-
     finally:
         if os.path.exists(archive_path):
             os.remove(archive_path)

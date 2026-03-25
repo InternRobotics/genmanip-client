@@ -63,6 +63,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         help="Project root containing saved/eval_results (default: cwd)",
     )
+    leaderboard_submit.add_argument(
+        "--include-videos",
+        action="store_true",
+        default=False,
+        help="Include video files in the submission (larger upload)",
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -88,6 +94,7 @@ def run(args: argparse.Namespace) -> int:
             args.port,
             args.project_root,
             benchmark_id=args.benchmark_id,
+            include_videos=args.include_videos,
         )
         return 0
     print("Error: unknown leaderboard subcommand", file=sys.stderr)
