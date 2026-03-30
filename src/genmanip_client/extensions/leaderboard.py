@@ -8,6 +8,7 @@ from typing import Any
 
 import urllib3
 import requests
+from tqdm import tqdm
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -16,7 +17,7 @@ DEFAULT_LEADERBOARD_HOST = os.getenv("LEADERBOARD_HOST", "localhost")
 DEFAULT_LEADERBOARD_PORT = int(os.getenv("LEADERBOARD_PORT", 8000))
 
 # Extensions skipped by default; use --include-videos to also include them
-_SKIP_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".rrd"}
+_SKIP_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".rrd", ".png", ".jpg"}
 # Always skip these filenames
 _SKIP_NAMES = {"submitted.flag"}
 # Always skip filenames with these prefixes
@@ -32,10 +33,14 @@ def resolve_project_root(project_root: str | None) -> str:
 def _create_selective_zip(results_dir, zip_base_path, include_videos=False):
     """Create a selective ZIP of results_dir, skipping video files unless include_videos=True."""
     archive_path = zip_base_path + ".zip"
-    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+
+    # Collect files first so we can show an accurate progress bar for zipping
+    files_to_add = []
+    with tqdm(unit="file", desc="Scanning files") as pbar:
         for dirpath, dirnames, filenames in os.walk(results_dir):
             dirnames[:] = [d for d in dirnames if not d.startswith(".")]
             for filename in filenames:
+                pbar.update(1)
                 if filename in _SKIP_NAMES:
                     continue
                 if any(filename.startswith(p) for p in _SKIP_PREFIXES):
@@ -45,7 +50,14 @@ def _create_selective_zip(results_dir, zip_base_path, include_videos=False):
                     continue
                 filepath = os.path.join(dirpath, filename)
                 arcname = os.path.relpath(filepath, results_dir)
+                files_to_add.append((filepath, arcname))
+
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        with tqdm(total=len(files_to_add), unit="file", desc="Creating ZIP") as pbar:
+            for filepath, arcname in files_to_add:
                 zf.write(filepath, arcname)
+                pbar.update(1)
+
     return archive_path
 
 
@@ -70,7 +82,8 @@ def upload_submission(
         print("Error: submission_infos must contain 'submission_name' and 'leaderboard_name'.")
         return None
 
-    file_size_mb = os.path.getsize(submission_file_path) / (1024 * 1024)
+    file_size = os.path.getsize(submission_file_path)
+    file_size_mb = file_size / (1024 * 1024)
     print(f"Upload size: {file_size_mb:.1f} MB")
 
     data = {
@@ -82,20 +95,29 @@ def upload_submission(
 
     try:
         with open(submission_file_path, "rb") as submission_file:
-            files = {
-                "file": (
-                    os.path.basename(submission_file_path),
-                    submission_file,
-                    "application/zip",
+            with tqdm.wrapattr(
+                submission_file,
+                "read",
+                total=file_size,
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+                desc="Uploading",
+            ) as wrapped_file:
+                files = {
+                    "file": (
+                        os.path.basename(submission_file_path),
+                        wrapped_file,
+                        "application/zip",
+                    )
+                }
+                read_timeout = max(600, int(file_size_mb * 0.6))
+                response = requests.post(
+                    url, files=files, data=data,
+                    timeout=(30, read_timeout),
+                    verify=False,
+                    proxies={"http": None, "https": None},
                 )
-            }
-            read_timeout = max(600, int(file_size_mb * 0.6))
-            response = requests.post(
-                url, files=files, data=data,
-                timeout=(30, read_timeout),
-                verify=False,
-                proxies={"http": None, "https": None},
-            )
         response.raise_for_status()
         result = response.json()
 
