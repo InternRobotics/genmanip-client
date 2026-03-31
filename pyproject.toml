@@ -26,7 +26,6 @@ full_numpy2 = [
 ]
 
 [project.scripts]
-genmanip-client = "genmanip_client.cli:main_legacy"
 gmp = "genmanip_client.cli:main"
 
 [tool.setuptools]
