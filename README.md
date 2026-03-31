@@ -185,11 +185,16 @@ extra software required.
 ### Prerequisites
 
 `rerun-sdk` is an optional dependency declared in `pyproject.toml`.
-Install it via the `visualize` extra to get the pinned version:
+Install it via the `visualize` extra to get the pinned version.
+The current `rerun-sdk>=0.30.2` path used by `gmp visualize` requires Python 3.11+:
 
 ```bash
 pip install -e ".[visualize]"
 ```
+
+If you are in Python 3.10, `gmp visualize` will start the web server but the
+Rerun viewer asset cache step will fail until you switch that environment to
+Python 3.11+.
 
 The first launch downloads and caches the Rerun WASM viewer assets (~60 MB).
 Subsequent launches reuse the cache and start in seconds.
@@ -207,10 +212,10 @@ gmp visualize --project_root /path/to/GenManip-Sim
 gmp visualize --port 55088
 ```
 
-Then open the printed URL in your browser, e.g.:
+Then open one of the printed local URLs in your browser, e.g.:
 
 ```
-https://<host>:55077/
+https://localhost:55077/
 ```
 
 > **Self-signed certificate** — the server uses HTTPS (required for the

@@ -62,6 +62,25 @@ _rrd_events: dict = {}   # ep_key → threading.Event (set when build done)
 _rrd_ready:  dict = {}   # ep_key → Path | None
 _rrd_hash_to_dir: dict = {}  # md5(ep_key) → Path
 
+
+def _import_rerun():
+    """Import rerun with a clearer error for unsupported Python versions."""
+    try:
+        import rerun as rr
+        return rr
+    except ImportError as e:
+        msg = str(e)
+        if "cannot import name 'Self' from 'typing'" in msg:
+            raise RuntimeError(
+                "rerun-sdk requires Python 3.11+ in this environment. "
+                "Your current Python is too old for `gmp visualize`."
+            ) from e
+        raise RuntimeError(
+            "rerun-sdk is not installed or failed to import. "
+            'Install it with `pip install -e ".[visualize]"` in a compatible environment.'
+        ) from e
+
+
 # ── CSS / HTML helpers ─────────────────────────────────────────────────────────
 
 _CSS = """
@@ -250,9 +269,9 @@ def _cache_viewer_assets() -> bool:
     version_file = _VIEWER_DIR / ".sdk_version"
 
     try:
-        import rerun as rr
+        rr = _import_rerun()
         current_version = rr.__version__
-    except Exception:
+    except RuntimeError:
         current_version = "unknown"
 
     cached_version = version_file.read_text().strip() if version_file.exists() else ""
@@ -272,7 +291,7 @@ def _cache_viewer_assets() -> bool:
             stale.unlink(missing_ok=True)
 
     try:
-        import rerun as rr
+        rr = _import_rerun()
         # Find a free port for the temporary asset server
         asset_port = 19090
         while True:
@@ -356,7 +375,7 @@ def _category(name: str) -> str:
 
 def _log_curves_to(rec, data: dict, video_ts_ns) -> None:
     """Log timeseries curves from pkl data into a RecordingStream."""
-    import rerun as rr
+    rr = _import_rerun()
 
     if not isinstance(data, dict):
         return
@@ -472,9 +491,9 @@ def _ensure_grpc_server() -> tuple[int, str]:
         if _grpc_rec is not None:
             return _grpc_port, _grpc_path
         try:
-            import rerun as rr
-        except ImportError:
-            raise RuntimeError("rerun-sdk is not installed. Run: pip install rerun-sdk")
+            rr = _import_rerun()
+        except RuntimeError as e:
+            raise RuntimeError(str(e)) from e
         rec = rr.RecordingStream(
             application_id="genmanip-visualizer",
             recording_id="persistent",
@@ -517,9 +536,9 @@ def _clear_and_log_episode(episode_dir: Path) -> None:
 def _log_episode_to_grpc(episode_dir: Path, rec) -> None:
     """Log all episode data into an existing gRPC-connected RecordingStream."""
     try:
-        import rerun as rr
+        rr = _import_rerun()
         import rerun.blueprint as rrb
-    except ImportError:
+    except RuntimeError:
         return
 
     video_files = sorted(v.name for v in episode_dir.glob("*.mp4") if not v.name.startswith("._"))
@@ -596,9 +615,9 @@ def _build_rrd_for_ep(ep_dir: Path) -> Optional[Path]:
     """Build and cache a .rrd file for ep_dir.  Returns path or None on error."""
     from uuid import uuid4
     try:
-        import rerun as rr
+        rr = _import_rerun()
         import rerun.blueprint as rrb
-    except ImportError:
+    except RuntimeError:
         return None
 
     # Store the .rrd next to the episode data so it lives on the same
@@ -1624,8 +1643,12 @@ def run_visualizer(project_root: Optional[str], port: int = 55077) -> None:
         server.socket = ctx.wrap_socket(server.socket, server_side=True)
 
     scheme = state["scheme"]
-    url = f"{scheme}://{hostname}:{port}/"
-    print(f"  Serving at {url}")
+    local_url = f"{scheme}://localhost:{port}/"
+    host_url = f"{scheme}://{hostname}:{port}/"
+    print(f"  Open locally: {local_url}")
+    if hostname not in {"localhost", "127.0.0.1"}:
+        print(f"  If running remotely, forward port {port} or open: {host_url}")
+        print(f"  Example: ssh -L {port}:localhost:{port} <remote-host>")
     print(f"  Press Ctrl+C to stop.")
 
     try:
