@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     _load_module(".extensions.online_cli").register(subparsers)
     if os.environ.get("GENMANIP_ENABLE_INTERNAL") == "1":
         _load_module(".extensions.leaderboard_cli").register(subparsers)
+    _load_module(".extensions.visualize_cli").register(subparsers)
 
     # Parse arguments
     args = parser.parse_args(argv)
@@ -65,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         return _load_module(".extensions.online_cli").run(args)
     elif args.command == "leaderboard":
         return _load_module(".extensions.leaderboard_cli").run(args)
+    elif args.command == "visualize":
+        return _load_module(".extensions.visualize_cli").run(args)
     else:
         parser.print_help()
         return 1

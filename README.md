@@ -33,6 +33,7 @@ gmp --help
 - `gmp status`: Get current job status from the server.
 - `gmp clean`: Clean generated mesh cache, eval results, logs, and recursive lock/tmp leftovers.
 - `gmp online create`: Create an online evaluation task.
+- `gmp visualize`: Browse eval results and replay episodes in the Rerun viewer.
 - `gmp online ready`: Check if an online evaluation task is ready.
 - `gmp online submit`: Create an online evaluation task and poll until ready.
 
@@ -59,6 +60,16 @@ gmp eval --worker_ids 0,1 --host 127.0.0.1 --port 8087 --plot_on_episode_end
 
 # Generate plots for an existing episode directory
 gmp plot client_results/<benchmark>/<run_id>/<task>/<seed>
+
+# Visualize eval results from the current directory
+gmp visualize
+
+# Visualize with an explicit project root on a custom port
+gmp visualize --project_root /path/to/GenManip-Sim --port 55088
+
+# Show cached .rrd files that would be removed, then remove them
+gmp visualize --flush-cache --dry-run
+gmp visualize --flush-cache
 
 # Online evaluation: create and wait for endpoint, then eval
 resp=$(gmp online submit --base_url https://example.com --token YOUR_TOKEN --task_id T2025123100001 --model_name internVLA --model_type VLA --benchmark_set EBench --print_endpoint)
@@ -162,6 +173,92 @@ python ray_eval_server.py --episode_recorder_save_every 0
 ```
 
 This is especially useful for online evaluation where saving images is usually not needed.
+
+
+## Episode Visualizer
+
+`gmp visualize` starts a local HTTPS web server that lets you browse eval runs,
+inspect per-task success rates, and replay individual episodes in the
+[Rerun](https://rerun.io) WASM viewer — all from a normal browser with no
+extra software required.
+
+### Prerequisites
+
+`rerun-sdk` is an optional dependency declared in `pyproject.toml`.
+Install it via the `visualize` extra to get the pinned version:
+
+```bash
+pip install -e ".[visualize]"
+```
+
+The first launch downloads and caches the Rerun WASM viewer assets (~60 MB).
+Subsequent launches reuse the cache and start in seconds.
+
+### Basic usage
+
+```bash
+# From the project root (looks for saved/eval_results/ in cwd)
+gmp visualize
+
+# Explicit project root
+gmp visualize --project_root /path/to/GenManip-Sim
+
+# Custom port (default: 55077)
+gmp visualize --port 55088
+```
+
+Then open the printed URL in your browser, e.g.:
+
+```
+https://<host>:55077/
+```
+
+> **Self-signed certificate** — the server uses HTTPS (required for the
+> WebCodecs API that decodes MP4 video inside Rerun). On first visit the
+> browser will show a certificate warning; click **Advanced → Proceed** to
+> accept it. After that, all `fetch()` calls to the same origin work normally.
+
+### Navigation
+
+| Page | How to reach it | What you see |
+|------|----------------|--------------|
+| Home | `/` | All runs, sortable by name or time |
+| Run detail | click a run | Task cards with per-task SR; episode dots (green = success, red = fail) |
+| Episode viewer | click an episode dot | Rerun viewer with video + joint/gripper/base state & action curves |
+
+Clicking an episode dot triggers a background `.rrd` build (first time only)
+and reloads the Rerun iframe with the new recording. Subsequent clicks on the
+same episode load instantly from the on-disk cache.
+
+### Cache management
+
+Each episode's `.rrd` file is cached as `.genmanip_vis.rrd` **inside the
+episode directory** (next to the `.mp4` and `.pkl` files), so it lives on the
+same storage mount as the raw data.
+
+To inspect or remove all cached files:
+
+```bash
+# Show what would be deleted (dry run)
+gmp visualize --flush-cache --dry-run
+
+# Delete all cached .rrd files
+gmp visualize --flush-cache
+```
+
+### Remote server workflow
+
+If eval results live on a remote machine accessible via SSH port-forward:
+
+```bash
+# On your local machine — forward remote port 55077 to localhost
+ssh -L 55077:localhost:55077 maker
+
+# On the remote machine
+gmp visualize --project_root /mnt/workspace/projects/GenManip-Sim
+
+# Then open https://localhost:55077/ in your local browser
+```
 
 ## Cleanup
 

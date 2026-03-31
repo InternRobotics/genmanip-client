@@ -12,6 +12,8 @@ authors = [{ name = "GenManip-Sim contributors" }]
 dependencies = ["requests>=2.0.0"]
 
 [project.optional-dependencies]
+visualize = ["rerun-sdk>=0.30.2"]
+
 full_numpy1 = [
     "Pillow>=9.0.0", "torch>=2.0.0", "matplotlib", "PyTurboJPEG",
     "numpy<2",
