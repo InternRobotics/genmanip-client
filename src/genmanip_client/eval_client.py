@@ -644,7 +644,7 @@ class EvalClient:
             self.fps = fps
             self.cam_order = cam_order or [
                 "left_camera_view",
-                "top_camera_view",
+                "overlook_camera_view",
                 "right_camera_view",
                 "obs_camera_view",
                 "realsense_view",

@@ -28,7 +28,7 @@ gmp --help
 ### gmp Commands
 
 - `gmp submit <config_paths...>`: Submit evaluation jobs to the server.
-- `gmp eval`: Run the eval client (legacy behavior of `genmanip-client`).
+- `gmp eval`: Run the eval client with fake actions.
 - `gmp plot <episode_dir>`: Generate action/state plots and a merged plot video for one episode.
 - `gmp status`: Get current job status from the server.
 - `gmp clean`: Clean generated mesh cache, eval results, logs, and recursive lock/tmp leftovers.
@@ -164,16 +164,6 @@ gmp eval \
   --chunk_size 8
 ```
 
-### Service-side note
-
-When launching the internal evaluation server, disable episode image dumping to avoid unnecessary overhead:
-
-```bash
-python ray_eval_server.py --episode_recorder_save_every 0
-```
-
-This is especially useful for online evaluation where saving images is usually not needed.
-
 
 ## Episode Visualizer
 
@@ -282,27 +272,6 @@ By default it keeps:
 - `saved/tasks`
 - `saved/demonstrations`
 
-## 🖥️ Web Viewer (Headless-Friendly)
-
-The GenManip client includes a lightweight web viewer for live camera streams when running in GUI-less terminals (e.g., DSW/SSH).
-
-Start the viewer:
-
-```bash
-gmp eval --web_view
-```
-
-Open in a browser:
-
-```
-http://<machine-ip>:55090/
-```
-
-Optional flags:
-- `--web_view_port port` to set a port for web viewer display
-- `--web_view_interval N` to show one frame every N steps (default: 10)
-- `--web_view_scale S` to scale the preview (default: 1.0)
-
 ## Plotting Episode Results
 
 Use `gmp plot` to post-process one saved episode directory:
@@ -328,6 +297,10 @@ To generate these plots automatically at episode end during evaluation:
 
 ```bash
 gmp eval --plot_on_episode_end
+```
+```python
+from genmanip_client import EvalClient
+EvalClient(..., plot_on_episode_end=True)
 ```
 
 This launches `gmp plot` asynchronously after each finished episode and writes logs to `plot.log` inside the episode directory.
