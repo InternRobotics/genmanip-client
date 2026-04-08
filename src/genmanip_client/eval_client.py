@@ -1,25 +1,25 @@
 import argparse
 import base64
+import binascii
 import copy
-from filelock import SoftFileLock
 import io
 import json
 import multiprocessing
 import os
-import queue
-import threading
-import sys
-import subprocess
-from functools import wraps
-from pathlib import Path
 import pickle
+import queue
+import re
+import subprocess
+import sys
 import tempfile
+import threading
 import time
 import uuid
-from turbojpeg import TurboJPEG, TJPF_RGB
+from functools import wraps
+from pathlib import Path
 from typing import Any
-import re
-import binascii
+
+from filelock import SoftFileLock, Timeout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from importlib import import_module
@@ -349,8 +349,29 @@ def _storage_worker_process(
                 task_result = {}
 
                 if task_result_path.exists():
-                    with task_result_path.open("r", encoding="utf-8") as f:
-                        task_result = json.load(f)
+                    try:
+                        with task_result_path.open("r", encoding="utf-8") as f:
+                            task_result = json.load(f)
+                    except (OSError, json.JSONDecodeError) as exc:
+                        corrupt_suffix = time.strftime("%Y%m%d-%H%M%S")
+                        corrupt_path = task_result_path.with_name(
+                            f"{task_result_path.stem}.corrupt-{corrupt_suffix}{task_result_path.suffix}"
+                        )
+                        try:
+                            os.replace(task_result_path, corrupt_path)
+                            print(
+                                "\033[33m⚠\033[0m "
+                                f"[StorageWorker] Corrupt episode_result.json moved to "
+                                f"{corrupt_path}: {exc}"
+                            )
+                        except OSError as move_exc:
+                            print(
+                                "\033[33m⚠\033[0m "
+                                f"[StorageWorker] Failed to archive corrupt "
+                                f"episode_result.json {task_result_path}: {move_exc}; "
+                                f"original parse error: {exc}"
+                            )
+                        task_result = {}
 
                 task_result[str(seed)] = {"score": score_value, "sr": sr_value}
 
