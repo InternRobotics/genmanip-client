@@ -64,6 +64,19 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Scale factor for web viewer frames (default: 1.0)",
     )
     eval_parser.add_argument(
+        "--save_process",
+        dest="save_process",
+        action="store_true",
+        default=True,
+        help="Save client-side process artifacts such as streamed frames and plots (default: enabled)",
+    )
+    eval_parser.add_argument(
+        "--no_save_process",
+        dest="save_process",
+        action="store_false",
+        help="Disable saving client-side process artifacts",
+    )
+    eval_parser.add_argument(
         "--frame_save_interval",
         type=int,
         default=0,

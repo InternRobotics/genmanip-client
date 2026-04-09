@@ -138,6 +138,7 @@ def _optional_import(name: str):
     return module
 
 
+from turbojpeg import TurboJPEG, TJPF_RGB
 _jpeg = TurboJPEG() 
 def decode_jpeg(metadata):
     return _jpeg.decode(
@@ -600,6 +601,7 @@ class EvalClient:
         base_url: str,
         worker_ids: list[str] = ["0"],
         save_result: bool = True,
+        save_process: bool = True,
         fps: int = 30,
         cam_order: list[str] | None = None,
         robot_id: str | None = None,
@@ -660,8 +662,9 @@ class EvalClient:
         self._health_check()
 
         self.save_result = save_result
+        self.save_process = save_process
         self._storage_worker: StorageWorker | None = None
-        if self.save_result:
+        if self.save_process or self.save_result:
             self.fps = fps
             self.cam_order = cam_order or [
                 "left_camera_view",
@@ -696,6 +699,8 @@ class EvalClient:
             self._start_web_viewer()
         print_info(f"Connected to server: {colored(base_url, Colors.CYAN)}")
         print_info(f"Workers: {colored(str(self.worker_ids), Colors.YELLOW)}")
+        print_info(f"Save process: {colored(str(self.save_process), Colors.YELLOW)}")
+        print_info(f"Save result: {colored(str(self.save_result), Colors.YELLOW)}")
         print_info(f"Plot on episode end: {colored(str(plot_on_episode_end), Colors.YELLOW)}")
         print()
 
@@ -827,7 +832,7 @@ class EvalClient:
 
     def _record(self, obs: dict, action_dict: dict) -> None:
         """Enqueue recording task to background storage worker (non-blocking)."""
-        if self._storage_worker is not None:
+        if self.save_process and self._storage_worker is not None:
             self._storage_worker.enqueue_record(obs, action_dict)
 
     def _record_episode_results(self, obs: dict) -> None:
@@ -837,7 +842,11 @@ class EvalClient:
         should_wait_for_drain = False
         for worker_id, wdata in obs.items():
             episode_result = wdata.get("episode_result")
-            if episode_result is not None and isinstance(episode_result, dict):
+            if (
+                self.save_result
+                and episode_result is not None
+                and isinstance(episode_result, dict)
+            ):
                 episode_result_with_worker = episode_result.copy()
                 episode_result_with_worker["worker_id"] = str(worker_id)
                 self._storage_worker.enqueue_episode_result(episode_result_with_worker)
@@ -1006,9 +1015,9 @@ class EvalClient:
         obs = deserialize_data(obs_dict)
         if not isinstance(obs, dict):
             raise ValueError("Obs is not a dictionary")
-        if self.save_result:
+        if self.save_process:
             self._record(obs, action_dict)
-            self._record_episode_results(obs)
+        self._record_episode_results(obs)
         step_time = time.time() - start
         self.step_count += 1
         self._update_web_frame(obs)
@@ -1162,9 +1171,10 @@ class EvalClient:
         if not isinstance(obs, dict):
             raise ValueError("Obs is not a dictionary")
 
-        if self.save_result and executed_steps > 0:
+        if executed_steps > 0:
             last_action = normalized_chunk[min(executed_steps, len(normalized_chunk)) - 1]
-            self._record(obs, last_action)
+            if self.save_process:
+                self._record(obs, last_action)
             self._record_episode_results(obs)
 
         self.step_count += max(0, executed_steps)
@@ -1450,6 +1460,7 @@ def run_cli(args: argparse.Namespace) -> int:
         args.worker_ids,
         robot_id=args.robot_id,
         token=args.token,
+        save_process=getattr(args, "save_process", True),
         run_id=getattr(args, "run_id", "") or "",
         web_view=getattr(args, "web_view", False),
         web_view_port=getattr(args, "web_view_port", 8088),
