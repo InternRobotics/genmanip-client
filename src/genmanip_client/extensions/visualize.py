@@ -41,6 +41,14 @@ _KEY_FILE    = _CACHE_DIR / "key.pem"
 
 _SUCCESS_ICON = {True: "✓", False: "✗", None: "·"}
 
+
+def _score_color(score: float) -> str:
+    """Map score in [0,1] to an HSL color: red->yellow->green."""
+    hue = int(score * 120)
+    sat = 50 + int(score * 30)
+    lit = 55 - int(score * 15)
+    return f"hsl({hue},{sat}%,{lit}%)"
+
 # ── Background gRPC session state ─────────────────────────────────────────────
 # Rerun 0.30.x always binds port 9876 — we start the server ONCE and keep it
 # alive for the lifetime of the visualizer.  Episode switching works by sending
@@ -919,16 +927,23 @@ class _Handler(BaseHTTPRequestHandler):
             benches.setdefault(tinfo["bench"], []).append((task_key, tinfo))
 
         total_ep = total_ok = 0
+        total_scores = []
         sidebar_html = ""
 
         for bench_name, bench_tasks in benches.items():
             bench_ep = bench_ok = 0
+            bench_scores = []
             bench_cards = ""
             for _, tinfo in bench_tasks:
                 episodes = tinfo["episodes"]
                 n  = len(episodes)
                 ok = sum(1 for e in episodes if e["result_info"].get("success_rate", 0) >= 0.5)
                 bench_ep += n; bench_ok += ok
+                _ep_scores = [float(e["result_info"].get("score", 0)) for e in episodes if e["result_info"].get("score") is not None]
+                bench_scores.extend(_ep_scores)
+                avg_sc = sum(_ep_scores) / len(_ep_scores) if _ep_scores else 0.0
+                sc_pct = f"{avg_sc*100:.0f}%" if _ep_scores else "N/A"
+                sc_badge_color = _score_color(avg_sc) if _ep_scores else "#718096"
 
                 sr_pct = f"{ok/n*100:.0f}%" if n else "N/A"
                 badge_color = (
@@ -964,24 +979,30 @@ class _Handler(BaseHTTPRequestHandler):
                     f"white-space:nowrap;flex:1' title='{task_short}'>{task_short}</span>"
                     f"<span style='white-space:nowrap;font-size:0.7rem;color:#a0aec0'>{n} ep</span>"
                     f"<span style='background:{badge_color};color:#fff;font-size:0.7rem;"
-                    f"font-weight:700;padding:1px 6px;border-radius:4px'>{sr_pct}</span>"
+                    f"font-weight:700;padding:1px 6px;border-radius:4px'>SR {sr_pct}</span>"
+                    f"<span style='background:{sc_badge_color};color:#fff;font-size:0.7rem;"
+                    f"font-weight:700;padding:1px 6px;border-radius:4px'>SC {sc_pct}</span>"
                     f"</div>"
                     f"<div style='padding:0.5rem 0.75rem;line-height:1'>{dots}</div>"
                     f"</div>"
                 )
 
-            total_ep += bench_ep; total_ok += bench_ok
+            total_ep += bench_ep; total_ok += bench_ok; total_scores.extend(bench_scores)
             bench_sr = f"{bench_ok/bench_ep*100:.2f}%" if bench_ep else "N/A"
+            bench_sc_avg = sum(bench_scores) / len(bench_scores) if bench_scores else 0.0
+            bench_sc = f"{bench_sc_avg*100:.2f}%" if bench_scores else "N/A"
             sidebar_html += (
                 f"<div style='margin-bottom:1rem'>"
                 f"<div style='font-size:0.8rem;font-weight:600;color:#90cdf4;"
                 f"display:flex;justify-content:space-between;margin-bottom:0.4rem'>"
                 f"<span>{bench_name}</span>"
-                f"<span style='color:#718096;font-weight:400'>{bench_sr}</span></div>"
+                f"<span style='color:#718096;font-weight:400'>SR {bench_sr} · SC {bench_sc}</span></div>"
                 f"{bench_cards}</div>"
             )
 
         overall_sr = f"{total_ok/total_ep*100:.2f}%" if total_ep else "N/A"
+        overall_sc_avg = sum(total_scores) / len(total_scores) if total_scores else 0.0
+        overall_sc = f"{overall_sc_avg*100:.2f}%" if total_scores else "N/A"
         viewer_src = f"{scheme}://{host}/viewer/index.html"
         viewer_iframe = (
             f"<iframe id='rr-viewer' allow='cross-origin-isolated' src='{viewer_src}'"
@@ -1013,7 +1034,7 @@ class _Handler(BaseHTTPRequestHandler):
             f"<div class='sidebar-hdr'>"
             f"<div><a href='/'>← Home</a></div>"
             f"<div style='font-weight:700;margin-top:0.2rem;font-size:0.95rem'>{run_dir.name}</div>"
-            f"<div style='font-size:0.72rem;color:#718096'>{total_ep} episodes · SR {overall_sr}</div>"
+            f"<div style='font-size:0.72rem;color:#718096'>{total_ep} episodes · SR {overall_sr} · SC {overall_sc}</div>"
             f"</div>"
             f"<div class='sidebar-body'>{sidebar_html}</div>"
             f"</div>"
