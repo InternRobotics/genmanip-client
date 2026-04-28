@@ -17,11 +17,13 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import os
 import pickle
 import socket
 import ssl
 import subprocess
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -206,6 +208,177 @@ def _find_runs(base: Path) -> list[Path]:
             if r.is_dir() and not r.name.startswith("."):
                 runs.append(r)
     return runs
+
+
+# ── Run index (cached background scanner) ────────────────────────────────────
+# Mirrors progress_manager.LOCK_TIMEOUT_SECONDS (300s). The server refreshes
+# each lock file via utime() while a worker is alive; an mtime within this
+# window means the episode is currently being evaluated.
+_LOCK_ACTIVE_WINDOW_S = 300
+
+# A background thread re-scans every _RUN_INDEX_REFRESH_S seconds and stores
+# the result in _RUN_INDEX. Home page reads from the cache, so it never blocks
+# on filesystem walks (which take ~7 s for 250+ runs on a CPFS mount).
+_RUN_INDEX_REFRESH_S = 30
+_RUN_INDEX_LOCK = threading.Lock()
+_RUN_INDEX: dict = {
+    "active": [],     # list[(run_dir: Path, locks: list[dict])]
+    "finished": [],   # list[(run_dir: Path, n_episodes: int)]
+    "scanned_at": 0.0,
+    "duration_s": 0.0,
+}
+_RUN_INDEX_THREAD: Optional[threading.Thread] = None
+_RUN_INDEX_STOP = threading.Event()
+
+
+def _scan_run_dir(run_dir: Path, max_age_s: int = _LOCK_ACTIVE_WINDOW_S) -> dict:
+    """Walk a single run dir once, collecting fresh locks, completed episode
+    count, and aggregate SR/score across all completed episodes. One
+    traversal instead of two = half the CPFS roundtrips per run.
+
+    Returns:
+        {
+            "locks": list[{task, seed, mtime, age_s}],   # sorted by age
+            "n_episodes": int,                            # result_info.json count
+            "n_success": int,                             # success_rate >= 0.5 count
+            "score_sum": float,                           # sum of episode scores
+            "score_count": int,                           # episodes that reported a score
+        }
+    """
+    now = time.time()
+    locks: list[dict] = []
+    n_episodes = 0
+    n_success = 0
+    score_sum = 0.0
+    score_count = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(run_dir):
+            # Skip hidden dirs (e.g. .genmanip_vis cache, __MACOSX)
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            for fname in filenames:
+                if fname == "result_info.json":
+                    n_episodes += 1
+                    full = Path(dirpath) / fname
+                    try:
+                        with open(full) as fh:
+                            info = json.load(fh)
+                    except (OSError, ValueError):
+                        continue
+                    sr = info.get("success_rate")
+                    if isinstance(sr, (int, float)) and sr >= 0.5:
+                        n_success += 1
+                    sc = info.get("score")
+                    if isinstance(sc, (int, float)):
+                        score_sum += float(sc)
+                        score_count += 1
+                    continue
+                if not fname.endswith(".lock") or fname.endswith(".lock.lock"):
+                    continue
+                full = Path(dirpath) / fname
+                try:
+                    st = full.stat()
+                except OSError:
+                    continue
+                age = now - st.st_mtime
+                if age > max_age_s:
+                    continue
+                try:
+                    task_rel = str(full.parent.relative_to(run_dir))
+                except ValueError:
+                    task_rel = str(full.parent)
+                locks.append({
+                    "task": task_rel,
+                    "seed": full.stem,
+                    "mtime": st.st_mtime,
+                    "age_s": age,
+                })
+    except OSError:
+        pass
+    locks.sort(key=lambda d: d["age_s"])
+    return {
+        "locks": locks,
+        "n_episodes": n_episodes,
+        "n_success": n_success,
+        "score_sum": score_sum,
+        "score_count": score_count,
+    }
+
+
+def _build_run_index(base: Path) -> dict:
+    """Scan every run directory under `base` and return a categorised index.
+
+    A run is "active" if it has at least one fresh lock file. A run is
+    "finished" if it has at least one completed episode AND no active locks.
+    Empty directories (no locks, no results) are dropped entirely so the home
+    page doesn't show stale or just-created run dirs.
+    """
+    t0 = time.time()
+    active: list[tuple[Path, list[dict]]] = []
+    finished: list[tuple[Path, dict]] = []
+    runs = _find_runs(base)
+    for run_dir in runs:
+        info = _scan_run_dir(run_dir)
+        if info["locks"]:
+            active.append((run_dir, info["locks"]))
+        elif info["n_episodes"] > 0:
+            finished.append((run_dir, {
+                "n_episodes": info["n_episodes"],
+                "n_success": info["n_success"],
+                "score_sum": info["score_sum"],
+                "score_count": info["score_count"],
+            }))
+        # else: empty/pending — hide entirely
+    return {
+        "active": active,
+        "finished": finished,
+        "scanned_at": t0,
+        "duration_s": time.time() - t0,
+    }
+
+
+def _start_run_index_thread(base: Path) -> None:
+    """Spawn the background scanner. Does an initial blocking scan first so
+    the very first home request has data to display."""
+    global _RUN_INDEX_THREAD
+    if _RUN_INDEX_THREAD is not None and _RUN_INDEX_THREAD.is_alive():
+        return
+
+    # Initial synchronous scan — runs once before the HTTP server starts.
+    initial = _build_run_index(base)
+    with _RUN_INDEX_LOCK:
+        _RUN_INDEX.update(initial)
+    print(
+        f"  [run-index] initial scan: {len(initial['active'])} active, "
+        f"{len(initial['finished'])} finished "
+        f"({initial['duration_s']:.1f}s)"
+    )
+
+    def _loop():
+        while not _RUN_INDEX_STOP.is_set():
+            if _RUN_INDEX_STOP.wait(_RUN_INDEX_REFRESH_S):
+                return
+            try:
+                snapshot = _build_run_index(base)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [run-index] scan failed: {exc}")
+                continue
+            with _RUN_INDEX_LOCK:
+                _RUN_INDEX.update(snapshot)
+
+    _RUN_INDEX_THREAD = threading.Thread(
+        target=_loop, name="run-index", daemon=True
+    )
+    _RUN_INDEX_THREAD.start()
+
+
+def _read_run_index() -> dict:
+    with _RUN_INDEX_LOCK:
+        return {
+            "active": list(_RUN_INDEX["active"]),
+            "finished": list(_RUN_INDEX["finished"]),
+            "scanned_at": _RUN_INDEX["scanned_at"],
+            "duration_s": _RUN_INDEX["duration_s"],
+        }
 
 
 # ── Rerun helpers ─────────────────────────────────────────────────────────────
@@ -860,18 +1033,39 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _home(self, qs):
         import datetime
-        runs = list(self.server_state["runs"])
-        sort_by  = (qs.get("sort")  or ["time"])[0]   # "name" or "time"
+
+        # Read from background-refreshed cache. Never blocks on filesystem.
+        index = _read_run_index()
+        active_rows: list[tuple[Path, list[dict]]] = index["active"]
+        finished_pairs: list[tuple[Path, dict]] = index["finished"]
+        scanned_at = index["scanned_at"]
+        scan_dur = index["duration_s"]
+
+        sort_by  = (qs.get("sort")  or ["time"])[0]   # "name" / "time" / "sr" / "sc"
         sort_dir = (qs.get("order") or ["desc"])[0]   # "asc" or "desc"
         reverse  = sort_dir == "desc"
 
+        def _sr_of(p):
+            stats = p[1]
+            return stats["n_success"] / stats["n_episodes"] if stats["n_episodes"] else 0.0
+
+        def _sc_of(p):
+            stats = p[1]
+            return stats["score_sum"] / stats["score_count"] if stats["score_count"] else 0.0
+
         if sort_by == "name":
-            runs.sort(key=lambda r: r.name, reverse=reverse)
+            finished_pairs.sort(key=lambda p: p[0].name, reverse=reverse)
+        elif sort_by == "sr":
+            finished_pairs.sort(key=_sr_of, reverse=reverse)
+        elif sort_by == "sc":
+            finished_pairs.sort(key=_sc_of, reverse=reverse)
         else:
-            runs.sort(key=lambda r: r.stat().st_mtime, reverse=reverse)
+            finished_pairs.sort(
+                key=lambda p: p[0].stat().st_mtime if p[0].exists() else 0.0,
+                reverse=reverse,
+            )
 
         def _th(label, col):
-            """Column header with sort toggle link."""
             if sort_by == col:
                 new_order = "asc" if sort_dir == "desc" else "desc"
                 arrow = " ▼" if sort_dir == "desc" else " ▲"
@@ -880,21 +1074,168 @@ class _Handler(BaseHTTPRequestHandler):
                 arrow = ""
             return f"<th><a href='/?sort={col}&order={new_order}' style='color:inherit'>{label}{arrow}</a></th>"
 
+        # ── Finished Runs table ───────────────────────────────────────────
         rows = ""
-        for i, r in enumerate(runs):
+        for i, (r, stats) in enumerate(finished_pairs):
             href  = f"/run?id={r}"
-            mtime = datetime.datetime.fromtimestamp(r.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+            try:
+                mtime = datetime.datetime.fromtimestamp(
+                    r.stat().st_mtime
+                ).strftime("%Y-%m-%d %H:%M")
+            except OSError:
+                mtime = "—"
+
+            n_ep = stats["n_episodes"]
+            sr_val = stats["n_success"] / n_ep if n_ep else 0.0
+            sc_val = (
+                stats["score_sum"] / stats["score_count"]
+                if stats["score_count"] else 0.0
+            )
+            sr_color = _score_color(sr_val) if n_ep else "#718096"
+            sc_color = (
+                _score_color(sc_val) if stats["score_count"] else "#718096"
+            )
+            sr_disp = f"{sr_val*100:.1f}%" if n_ep else "—"
+            sc_disp = (
+                f"{sc_val*100:.1f}%" if stats["score_count"] else "—"
+            )
+            badge_style = (
+                "display:inline-block;color:#fff;font-size:0.7rem;"
+                "font-weight:700;padding:1px 6px;border-radius:4px;"
+                "min-width:48px;text-align:center"
+            )
+
             rows += (
                 f"<tr><td>{i+1}</td>"
                 f"<td><a href='{href}'>{r.parent.name}</a></td>"
                 f"<td><a href='{href}'>{r.name}</a></td>"
-                f"<td>{mtime}</td></tr>\n"
+                f"<td>{mtime}</td>"
+                f"<td style='text-align:right'>{n_ep}</td>"
+                f"<td style='text-align:right'>"
+                f"<span style='{badge_style};background:{sr_color}'>{sr_disp}</span>"
+                f"</td>"
+                f"<td style='text-align:right'>"
+                f"<span style='{badge_style};background:{sc_color}'>{sc_disp}</span>"
+                f"</td>"
+                f"</tr>\n"
             )
+        def _th_right(label, col):
+            inner = _th(label, col)
+            # Replace opening <th> with right-aligned variant.
+            return inner.replace("<th>", "<th style='text-align:right'>", 1)
+
+        finished_table = (
+            "<table><thead><tr>"
+            f"<th>#</th>{_th('Benchmark','bench')}{_th('Run ID','name')}{_th('Created','time')}"
+            "<th style='text-align:right'>Episodes</th>"
+            f"{_th_right('SR','sr')}"
+            f"{_th_right('SC','sc')}"
+            "</tr></thead>"
+            f"<tbody>{rows or '<tr><td colspan=7 class=info-msg>No finished runs.</td></tr>'}</tbody>"
+            "</table>"
+        )
+
+        # ── Active Workers grouped by run ─────────────────────────────────
+        def _fmt_age(age_s: float) -> str:
+            if age_s < 60:
+                return f"{age_s:.0f}s"
+            if age_s < 3600:
+                return f"{age_s/60:.1f}m"
+            return f"{age_s/3600:.1f}h"
+
+        active_total = sum(len(locks) for _, locks in active_rows)
+        if active_rows:
+            # Sort run groups by freshest lock so the most recently updated
+            # run rises to the top of the panel.
+            sorted_groups = sorted(
+                active_rows,
+                key=lambda rl: min((l["age_s"] for l in rl[1]), default=1e18),
+            )
+            group_blocks = ""
+            for run_dir, locks in sorted_groups:
+                bench_name = run_dir.parent.name
+                run_name = run_dir.name
+                ep_rows = ""
+                for lock in locks:
+                    ep_rows += (
+                        f"<tr>"
+                        f"<td style='font-family:monospace;font-size:0.72rem;"
+                        f"color:#cbd5e0;padding:0.2rem 0.4rem'>{lock['task']}</td>"
+                        f"<td style='font-family:monospace;font-size:0.78rem;"
+                        f"padding:0.2rem 0.4rem'>{lock['seed']}</td>"
+                        f"<td style='font-size:0.72rem;text-align:right;"
+                        f"color:#a0aec0;padding:0.2rem 0.4rem'>"
+                        f"{_fmt_age(lock['age_s'])}</td>"
+                        f"</tr>"
+                    )
+                group_blocks += (
+                    "<div style='margin-bottom:0.75rem;border:1px solid #2d3748;"
+                    "border-radius:6px;background:#0f1117;overflow:hidden'>"
+                    # Group header
+                    "<div style='padding:0.4rem 0.6rem;border-bottom:1px solid #2d3748;"
+                    "background:#1a202c'>"
+                    f"<div style='font-size:0.78rem;font-weight:600;color:#90cdf4;"
+                    f"overflow:hidden;text-overflow:ellipsis;white-space:nowrap' "
+                    f"title='{run_name}'>{run_name}</div>"
+                    f"<div style='font-size:0.68rem;color:#718096;display:flex;"
+                    f"justify-content:space-between;margin-top:0.1rem'>"
+                    f"<span>{bench_name}</span>"
+                    f"<span>{len(locks)} episode"
+                    f"{'s' if len(locks) != 1 else ''}</span>"
+                    f"</div>"
+                    "</div>"
+                    # Episode rows
+                    f"<table style='width:100%;border-collapse:collapse'>{ep_rows}</table>"
+                    "</div>"
+                )
+            active_table = group_blocks
+        else:
+            active_table = (
+                "<p class='info-msg' style='padding:1.5rem 0'>"
+                "No active episodes detected.</p>"
+            )
+
+        # ── Status footer ─────────────────────────────────────────────────
+        if scanned_at > 0:
+            scanned_age = max(0, time.time() - scanned_at)
+            scan_disp = (
+                f"index updated {scanned_age:.0f}s ago "
+                f"(scan {scan_dur:.1f}s, refresh every {_RUN_INDEX_REFRESH_S}s)"
+            )
+        else:
+            scan_disp = "scanning..."
+
+        # ── Two-column layout ─────────────────────────────────────────────
         body = (
-            "<div class='header'><h1>GenManip Visualizer</h1>"
-            "<small>Select a run to browse episodes</small></div>"
-            f"<table><thead><tr><th>#</th>{_th('Benchmark','bench')}{_th('Run ID','name')}{_th('Created','time')}</tr></thead>"
-            f"<tbody>{rows or '<tr><td colspan=4 class=info-msg>No runs found.</td></tr>'}</tbody></table>"
+            "<meta http-equiv='refresh' content='30'>"
+            "<div class='header' style='display:flex;justify-content:space-between;"
+            "align-items:baseline;flex-wrap:wrap;gap:1rem'>"
+            "<div><h1 style='display:inline'>GenManip Visualizer</h1>"
+            "<small style='margin-left:0.75rem'>"
+            f"{len(finished_pairs)} finished &middot; "
+            f"{active_total} active episode{'s' if active_total != 1 else ''} "
+            f"across {len(active_rows)} run{'s' if len(active_rows) != 1 else ''}"
+            "</small></div>"
+            f"<small style='color:#718096'>{scan_disp}</small>"
+            "</div>"
+            "<div style='display:grid;grid-template-columns:1fr 360px;gap:1.5rem;"
+            "align-items:start'>"
+            # Left column: finished runs
+            "<div>"
+            "<h2 style='margin-top:0'>Finished Runs</h2>"
+            f"{finished_table}"
+            "</div>"
+            # Right column: active workers (sticky so it stays visible while scrolling)
+            "<div style='position:sticky;top:1rem'>"
+            "<h2 style='margin-top:0'>Active Workers "
+            f"<span style='font-weight:400;color:#a0aec0;font-size:0.8rem'>"
+            f"({active_total})</span></h2>"
+            "<div style='max-height:80vh;overflow-y:auto;border:1px solid #2d3748;"
+            "border-radius:6px;padding:0.25rem 0.5rem;background:#1a202c'>"
+            f"{active_table}"
+            "</div>"
+            "</div>"
+            "</div>"
         )
         self._html(200, _page("Home", body))
 
@@ -960,8 +1301,13 @@ class _Handler(BaseHTTPRequestHandler):
                     metrics_attr = json.dumps(metrics).replace("&", "&amp;").replace('"', "&quot;")
                     ep_dir_attr  = str(ep_dir).replace("&", "&amp;").replace('"', "&quot;")
                     ep_id   = ep["id"]
-                    success = ep["result_info"].get("success_rate", 0) >= 0.5
-                    color   = "#2ea44f" if success else "#e53e3e"
+                    _sc = ep["result_info"].get("score")
+                    if isinstance(_sc, (int, float)):
+                        color = _score_color(float(_sc))
+                    else:
+                        # Fall back to SR-based red/green if score is missing.
+                        success = ep["result_info"].get("success_rate", 0) >= 0.5
+                        color = "#2ea44f" if success else "#e53e3e"
                     dots += (
                         f"<span class='ep-dot' tabindex='0' title='Episode {ep_id}' "
                         f"data-ep-dir=\"{ep_dir_attr}\" data-ep=\"{ep_id}\" data-metrics=\"{metrics_attr}\" "
@@ -1620,6 +1966,9 @@ def run_visualizer(project_root: Optional[str], port: int = 55077) -> None:
 
     runs = _find_runs(base)
 
+    print(f"  Building initial run index ({len(runs)} run dirs)...")
+    _start_run_index_thread(base)
+
     print(f"  Caching Rerun viewer assets...")
     _cache_viewer_assets()
 
@@ -1631,7 +1980,7 @@ def run_visualizer(project_root: Optional[str], port: int = 55077) -> None:
             except OSError:
                 return False
 
-    state = {"runs": runs, "port": port, "scheme": "https", "_active_grpc_port": 0, "_active_grpc_path": "/"}
+    state = {"runs": runs, "base": base, "port": port, "scheme": "https", "_active_grpc_port": 0, "_active_grpc_path": "/"}
 
     class Handler(_Handler):
         server_state = state

@@ -83,13 +83,20 @@ def make_progress_bar(completed: int, total: int, width: int = 20) -> str:
     return f"{bar} {percent:5.1f}%"
 
 
-def get_server_status(base_url: str, timeout: float = DEFAULT_TIMEOUT) -> dict:
+def get_server_status(
+    base_url: str,
+    timeout: float = DEFAULT_TIMEOUT,
+    headers: dict[str, str] | None = None,
+    params: dict[str, str] | None = None,
+) -> dict:
     """
     Get current server status.
 
     Args:
         base_url: Server base URL
         timeout: Request timeout in seconds
+        headers: Optional HTTP headers
+        params: Optional query params
 
     Returns:
         Status dict from server
@@ -98,7 +105,12 @@ def get_server_status(base_url: str, timeout: float = DEFAULT_TIMEOUT) -> dict:
         RuntimeError: If server is not reachable or returns error
     """
     try:
-        resp = requests.get(f"{base_url}/status", timeout=timeout)
+        resp = requests.get(
+            f"{base_url}/status",
+            timeout=timeout,
+            headers=headers,
+            params=params,
+        )
         if resp.status_code != 200:
             raise RuntimeError(
                 f"Server returned status {resp.status_code}: {resp.text}"
