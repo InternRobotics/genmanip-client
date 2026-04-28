@@ -95,13 +95,18 @@ def print_success(message: str) -> None:
     print(f"{icon} {colored(message, Colors.BRIGHT_GREEN)}")
 
 
+def print_warning(message: str) -> None:
+    icon = colored("!", Colors.YELLOW, Colors.BOLD)
+    print(f"{icon} {colored(message, Colors.YELLOW)}")
+
+
 # Timeout constants (in seconds)
 DEFAULT_STEP_TIMEOUT = 600  # 10 minutes
-DEFAULT_RESET_TIMEOUT = 600  # 10 minutes
+DEFAULT_RESET_TIMEOUT = 3000  # 50 minutes
 DEFAULT_CREATE_TIMEOUT = 600  # 10 minutes
 DEFAULT_HEALTH_CHECK_TIMEOUT = 5.0
 DEFAULT_STORAGE_LOCK_TIMEOUT = 5.0
-DEFAULT_RESET_POLL_INTERVAL = 0.2
+DEFAULT_RESET_POLL_INTERVAL = 1
 
 
 def _retry_on_failure(max_retries: int = 3, backoff: float = 1.0):
@@ -353,7 +358,7 @@ def _storage_worker_process(
                     try:
                         with task_result_path.open("r", encoding="utf-8") as f:
                             task_result = json.load(f)
-                    except (OSError, json.JSONDecodeError) as exc:
+                    except (OSError, ValueError) as exc:
                         corrupt_suffix = time.strftime("%Y%m%d-%H%M%S")
                         corrupt_path = task_result_path.with_name(
                             f"{task_result_path.stem}.corrupt-{corrupt_suffix}{task_result_path.suffix}"
@@ -610,10 +615,6 @@ class EvalClient:
         run_id: str = "",
         verbose: bool = True,
         token: str | None = None,
-        web_view: bool = False,
-        web_view_port: int = 55090,
-        web_view_interval: int = 10,
-        web_view_scale: float = 1.0,
         frame_save_interval: int = 0,
         plot_on_episode_end: bool = False,
     ):
@@ -686,97 +687,12 @@ class EvalClient:
             )
 
         self.step_count = 0
-        self._web_view = web_view
-        self._web_view_port = int(web_view_port)
-        self._web_view_interval = max(1, int(web_view_interval))
-        self._web_view_scale = float(web_view_scale)
-        self._web_server: ThreadingHTTPServer | None = None
-        self._web_thread: threading.Thread | None = None
-        self._web_frame_lock = threading.Lock()
-        self._web_frame_jpeg: bytes | None = None
-        self._web_cv2 = None
-        if self._web_view:
-            self._start_web_viewer()
         print_info(f"Connected to server: {colored(base_url, Colors.CYAN)}")
         print_info(f"Workers: {colored(str(self.worker_ids), Colors.YELLOW)}")
         print_info(f"Save process: {colored(str(self.save_process), Colors.YELLOW)}")
         print_info(f"Save result: {colored(str(self.save_result), Colors.YELLOW)}")
         print_info(f"Plot on episode end: {colored(str(plot_on_episode_end), Colors.YELLOW)}")
         print()
-
-    def _start_web_viewer(self) -> None:
-        try:
-            import cv2  # type: ignore
-        except ImportError:
-            print_info("Web viewer disabled (opencv-python not available).")
-            self._web_view = False
-            return
-        self._web_cv2 = cv2
-
-        class _Handler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:
-                if self.path in ("/", "/index.html"):
-                    body = (
-                        "<html><head><title>GenManip Stream</title>"
-                        "<style>body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#ddd;text-align:center}"
-                        "img{max-width:96vw;max-height:92vh;margin-top:10px;border:1px solid #333}</style>"
-                        "</head><body><h3>GenManip Stream</h3>"
-                        "<img src='frame.jpg' id='f' />"
-                        "<script>"
-                        "setInterval(()=>{const img=document.getElementById('f');"
-                        "img.src='frame.jpg?t='+Date.now();}, 200);"
-                        "</script></body></html>"
-                    ).encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html; charset=utf-8")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    self.wfile.write(body)
-                    return
-                if self.path.startswith("/frame.jpg"):
-                    with self.server._frame_lock:
-                        data = self.server._frame_jpeg
-                    if not data:
-                        self.send_response(204)
-                        self.end_headers()
-                        return
-                    self.send_response(200)
-                    self.send_header("Content-Type", "image/jpeg")
-                    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-                    self.send_header("Pragma", "no-cache")
-                    self.send_header("Content-Length", str(len(data)))
-                    self.end_headers()
-                    self.wfile.write(data)
-                    return
-                self.send_response(404)
-                self.end_headers()
-
-            def log_message(self, format: str, *args: Any) -> None:
-                return
-
-        try:
-            server = ThreadingHTTPServer(("0.0.0.0", self._web_view_port), _Handler)
-        except OSError as exc:
-            print_info(f"Web viewer disabled (port {self._web_view_port} unavailable): {exc}")
-            self._web_view = False
-            return
-        server._frame_lock = self._web_frame_lock  # type: ignore[attr-defined]
-        server._frame_jpeg = None  # type: ignore[attr-defined]
-        self._web_server = server
-        self._web_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        self._web_thread.start()
-        print_info(f"Web viewer: http://0.0.0.0:{self._web_view_port}")
-
-    def _stop_web_viewer(self) -> None:
-        if self._web_server is None:
-            return
-        try:
-            self._web_server.shutdown()
-            self._web_server.server_close()
-        except (OSError, RuntimeError) as exc:
-            print_info(f"Web viewer shutdown warning: {exc}")
-        self._web_server = None
-        self._web_thread = None
 
     def _health_check(self, timeout: float = DEFAULT_HEALTH_CHECK_TIMEOUT):
         """Check server connectivity before operations."""
@@ -814,10 +730,15 @@ class EvalClient:
             params.update(extra)
         return params
 
+    def _extract_error_detail(self, resp: requests.Response):
+        try:
+            return resp.json()
+        except ValueError:
+            return resp.text
+
     def close(self) -> None:
         """Close recorders."""
         self.close_recorders()
-        self._stop_web_viewer()
         self.kill_workers()
         print()
         print_success(f"Client closed.")
@@ -854,8 +775,6 @@ class EvalClient:
         if should_wait_for_drain:
             wait_start = time.time()
             self._storage_worker.wait_until_done()
-            wait_elapsed = time.time() - wait_start
-            print_info(f"Storage queue drained before reset in {wait_elapsed:.3f}s")
 
     @_retry_on_failure(max_retries=3, backoff=1.0)
     def _create_workers(self):
@@ -872,15 +791,18 @@ class EvalClient:
                 f"Create workers request timed out after {DEFAULT_CREATE_TIMEOUT}s"
             )
         if resp.status_code != 200:
-            try:
-                detail = resp.json()
-            except json.JSONDecodeError:
-                detail = resp.text
+            detail = self._extract_error_detail(resp)
             raise RuntimeError(
                 f"HTTP error when create_workers: {resp.status_code} - {detail}"
             )
 
     def reset(self):
+        try:
+            self.kill_workers()
+        except RuntimeError as exc:
+            # Reset can still recreate missing workers, so stale-worker cleanup is best-effort.
+            print_warning(f"Pre-reset kill failed: {exc}")
+
         payload = pickle.dumps(
             {"worker_ids": self.worker_ids}, protocol=pickle.HIGHEST_PROTOCOL
         )
@@ -900,13 +822,13 @@ class EvalClient:
             raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
 
         if resp.status_code != 200:
-            try:
-                detail = resp.json()
-            except json.JSONDecodeError:
-                detail = resp.text
+            detail = self._extract_error_detail(resp)
             raise RuntimeError(f"HTTP error on reset: {resp.status_code} - {detail}")
 
         obs_dict = pickle.loads(resp.content)
+        if not isinstance(obs_dict, dict):
+            raise ValueError("Reset response is not a dictionary")
+        obs_dict = self._resolve_pending_resets(obs_dict)
         obs = deserialize_data(obs_dict)
         print_info("Environment reset complete")
         print()
@@ -934,10 +856,7 @@ class EvalClient:
             raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
 
         if resp.status_code != 200:
-            try:
-                detail = resp.json()
-            except json.JSONDecodeError:
-                detail = resp.text
+            detail = self._extract_error_detail(resp)
             raise RuntimeError(
                 f"HTTP error on reset_result: {resp.status_code} - {detail}"
             )
@@ -948,6 +867,7 @@ class EvalClient:
         return result_dict
 
     def _resolve_pending_resets(self, obs_dict: dict) -> dict:
+        start = time.time()
         pending_worker_ids = [
             str(worker_id)
             for worker_id, worker_data in obs_dict.items()
@@ -979,7 +899,7 @@ class EvalClient:
 
             if pending_worker_set:
                 time.sleep(DEFAULT_RESET_POLL_INTERVAL)
-
+        print_info(f"Reset complete in {time.time() - start:.2f}s")
         return merged_obs
 
     def _step_single(self, action_dict: dict) -> tuple[dict, bool]:
@@ -1001,27 +921,11 @@ class EvalClient:
             raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
 
         if resp.status_code != 200:
-            try:
-                detail = resp.json()
-            except json.JSONDecodeError:
-                detail = resp.text
+            detail = self._extract_error_detail(resp)
             raise RuntimeError(f"HTTP error from server: {resp.status_code} - {detail}")
 
-        obs_dict = pickle.loads(resp.content)
-        if not isinstance(obs_dict, dict):
-            raise ValueError("Obs is not a dictionary")
-        obs_dict = self._resolve_pending_resets(obs_dict)
-        done = self.handle_done(obs_dict)
-        obs = deserialize_data(obs_dict)
-        if not isinstance(obs, dict):
-            raise ValueError("Obs is not a dictionary")
-        if self.save_process:
-            self._record(obs, action_dict)
-        self._record_episode_results(obs)
         step_time = time.time() - start
         self.step_count += 1
-        self._update_web_frame(obs)
-
         # Progress indicator (update every 10 steps to reduce noise)
         if self.verbose and self.step_count % 10 == 0:
             time_color = (
@@ -1033,6 +937,18 @@ class EvalClient:
                 f"  {colored('⟳', Colors.DIM)} Step {colored(str(self.step_count), Colors.WHITE)}: "
                 f"{colored(f'{step_time:.3f}s', time_color)}"
             )
+            
+        obs_dict = pickle.loads(resp.content)
+        if not isinstance(obs_dict, dict):
+            raise ValueError("Obs is not a dictionary")
+        obs_dict = self._resolve_pending_resets(obs_dict)
+        done = self.handle_done(obs_dict)
+        obs = deserialize_data(obs_dict)
+        if not isinstance(obs, dict):
+            raise ValueError("Obs is not a dictionary")
+        if self.save_process:
+            self._record(obs, action_dict)
+        self._record_episode_results(obs)
         return obs, done
 
     def _is_chunk_input(self, action_input: Any) -> bool:
@@ -1151,10 +1067,7 @@ class EvalClient:
             raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
 
         if resp.status_code != 200:
-            try:
-                detail = resp.json()
-            except json.JSONDecodeError:
-                detail = resp.text
+            detail = self._extract_error_detail(resp)
             raise RuntimeError(f"HTTP error from server: {resp.status_code} - {detail}")
 
         chunk_result = pickle.loads(resp.content)
@@ -1165,6 +1078,18 @@ class EvalClient:
         executed_steps = int(chunk_result.get("executed_steps", len(normalized_chunk)))
         if not isinstance(obs_dict, dict):
             raise ValueError("Obs is not a dictionary")
+            
+        step_time = time.time() - start
+        if self.verbose:
+            time_color = (
+                Colors.BRIGHT_GREEN
+                if step_time < 0.1
+                else Colors.YELLOW if step_time < 0.5 else Colors.RED
+            )
+            print(
+                f"  {colored('⟳', Colors.DIM)} Chunk {colored(str(executed_steps), Colors.WHITE)} steps: "
+                f"{colored(f'{step_time:.3f}s', time_color)}"
+            )
         obs_dict = self._resolve_pending_resets(obs_dict)
         done = self.handle_done(obs_dict)
         obs = deserialize_data(obs_dict)
@@ -1178,63 +1103,7 @@ class EvalClient:
             self._record_episode_results(obs)
 
         self.step_count += max(0, executed_steps)
-        self._update_web_frame(obs)
-        step_time = time.time() - start
-
-        if self.verbose:
-            time_color = (
-                Colors.BRIGHT_GREEN
-                if step_time < 0.1
-                else Colors.YELLOW if step_time < 0.5 else Colors.RED
-            )
-            print(
-                f"  {colored('⟳', Colors.DIM)} Chunk {colored(str(executed_steps), Colors.WHITE)} steps: "
-                f"{colored(f'{step_time:.3f}s', time_color)}"
-            )
         return obs, done
-
-    def _update_web_frame(self, obs: dict) -> None:
-        if not self._web_view:
-            return
-        if self._web_cv2 is None:
-            return
-        if self.step_count % self._web_view_interval != 0:
-            return
-        if not self.worker_ids:
-            return
-        wid = self.worker_ids[0]
-        wdata = obs.get(wid, {})
-        wobs = wdata.get("obs", {})
-        if not wobs or wobs.get("reset"):
-            return
-        frames_by_cam = {}
-        for k, v in list(wobs.items()):
-            if isinstance(k, str) and k.startswith("video."):
-                cam_name = k.split(".", 1)[1]
-                if isinstance(v, np.ndarray):
-                    frames_by_cam[cam_name] = v
-        if not frames_by_cam:
-            return
-        try:
-            top = concat_cams_top(frames_by_cam, self.cam_order)
-        except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as exc:
-            print_info(f"Failed to generate web frame: {exc}")
-            return
-        if self._web_view_scale != 1.0:
-            h, w = top.shape[:2]
-            new_w = max(2, int(w * self._web_view_scale))
-            new_h = max(2, int(h * self._web_view_scale))
-            top = self._web_cv2.resize(top, (new_w, new_h), interpolation=self._web_cv2.INTER_AREA)
-        frame_bgr = self._web_cv2.cvtColor(top, self._web_cv2.COLOR_RGB2BGR)
-        ok, buf = self._web_cv2.imencode(
-            ".jpg", frame_bgr, [int(self._web_cv2.IMWRITE_JPEG_QUALITY), 80]
-        )
-        if not ok:
-            return
-        with self._web_frame_lock:
-            self._web_frame_jpeg = buf.tobytes()
-        if self._web_server is not None:
-            self._web_server._frame_jpeg = self._web_frame_jpeg  # type: ignore[attr-defined]
 
     def handle_done(self, data: dict):
         for worker_id, wobs in data.items():
@@ -1252,9 +1121,7 @@ class EvalClient:
             for worker_data in data.values():
                 for key, value in worker_data["metric"].items():
                     result_dict[key] = value
-            # Filter out keys with "*"
-            filtered_results = {k: v for k, v in result_dict.items() if "*" not in k}
-            self._print_eval_result(filtered_results, title="Final Evaluation Result")
+            self._print_eval_result(result_dict, title="Final Evaluation Result")
             return True
         return False
 
@@ -1321,10 +1188,7 @@ class EvalClient:
             params=self._build_params(),
         )
         if resp.status_code != 200:
-            try:
-                detail = resp.json()
-            except json.JSONDecodeError:
-                detail = resp.text
+            detail = self._extract_error_detail(resp)
             raise RuntimeError(
                 f"HTTP error on kill_workers: {resp.status_code} - {detail}"
             )
@@ -1462,10 +1326,6 @@ def run_cli(args: argparse.Namespace) -> int:
         token=args.token,
         save_process=getattr(args, "save_process", True),
         run_id=getattr(args, "run_id", "") or "",
-        web_view=getattr(args, "web_view", False),
-        web_view_port=getattr(args, "web_view_port", 8088),
-        web_view_interval=getattr(args, "web_view_interval", 10),
-        web_view_scale=getattr(args, "web_view_scale", 1.0),
         frame_save_interval=getattr(args, "frame_save_interval", 0),
         plot_on_episode_end=getattr(args, "plot_on_episode_end", False),
     )
