@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import time
-from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_ONLINE_EVAL_CREATE_TASK_PATH = "/api/v1/benchmark/onlineEvaluation/createTask"
 DEFAULT_ONLINE_EVAL_READY_PATH = "/api/v1/benchmark/onlineEvaluation/ready"
-DEFAULT_EVAL_STOP_PATH = "/stop"
 
 class OnlineEvaluationClient:
     """Client for online evaluation API."""
@@ -30,17 +28,11 @@ class OnlineEvaluationClient:
             return {"Authorization": f"Bearer {self.token}"}
         return {}
 
-    def _post_url(
-        self,
-        url: str,
-        payload: dict | None = None,
-        params: dict[str, str] | None = None,
-    ) -> dict:
+    def _post(self, path: str, payload: dict) -> dict:
         try:
             resp = self.session.post(
-                url,
+                f"{self.base_url}{path}",
                 json=payload,
-                params=params,
                 headers=self._headers(),
                 timeout=self.timeout,
             )
@@ -52,45 +44,14 @@ class OnlineEvaluationClient:
 
         try:
             data = resp.json()
-        except ValueError:
-            return {"code": 0, "data": {"text": resp.text}}
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid JSON response: {resp.text}") from exc
 
         if isinstance(data, dict) and data.get("code", 0) != 0:
             msg = data.get("msg", "")
             raise RuntimeError(f"API error {data.get('code')}: {msg}")
 
         return data
-
-    def _post(self, path: str, payload: dict) -> dict:
-        return self._post_url(f"{self.base_url}{path}", payload=payload)
-
-    def _build_stop_urls(self, url: str) -> list[str]:
-        raw_url = url.strip().rstrip("/")
-        if raw_url == "":
-            raise RuntimeError("Stop URL must be a non-empty string")
-
-        parsed = urlsplit(raw_url)
-        path = parsed.path.rstrip("/")
-        candidate_paths: list[str] = []
-        if path.endswith(DEFAULT_EVAL_STOP_PATH):
-            candidate_paths.append(path)
-        else:
-            # Some hosted gateways expose control endpoints under the predict URL.
-            candidate_paths.append(f"{path}{DEFAULT_EVAL_STOP_PATH}")
-            # Some servers expose a root-level /stop endpoint next to /api/predict/*.
-            if "/api/predict/" in path:
-                candidate_paths.append(
-                    path.split("/api/predict/", 1)[0] + DEFAULT_EVAL_STOP_PATH
-                )
-
-        deduped_paths: list[str] = []
-        for candidate_path in candidate_paths:
-            if candidate_path not in deduped_paths:
-                deduped_paths.append(candidate_path)
-        return [
-            urlunsplit((parsed.scheme, parsed.netloc, candidate_path, "", ""))
-            for candidate_path in deduped_paths
-        ]
 
     def create_task(
         self,
@@ -128,21 +89,6 @@ class OnlineEvaluationClient:
             DEFAULT_ONLINE_EVAL_READY_PATH,
             payload,
         )
-
-    def stop(self, url: str, run_id: str, user_id: str | None = None) -> dict:
-        params = {"run_id": run_id}
-        if user_id:
-            params["user_id"] = user_id
-        last_error: RuntimeError | None = None
-        for stop_url in self._build_stop_urls(url):
-            try:
-                return self._post_url(stop_url, params=params)
-            except RuntimeError as exc:
-                last_error = exc
-                if not str(exc).startswith("HTTP 404:"):
-                    raise
-        assert last_error is not None
-        raise last_error
 
     def wait_until_ready(
         self,

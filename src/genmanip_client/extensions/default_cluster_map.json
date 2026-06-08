@@ -1,0 +1,258 @@
+{
+  "scene": {
+    "Home Bedroom": [
+      "perfume_to_cosmetics_rack"
+    ],
+    "Home Bathroom": [
+      "detergent",
+      "soap_to_dish"
+    ],
+    "Home Kitchen": [
+      "salt_to_spice_rack",
+      "dishwasher",
+      "bowl_to_plate",
+      "make_sandwich",
+      "utensils_to_holder"
+    ],
+    "Home Living Room": [
+      "remote_to_holder",
+      "teacup_to_saucer_teapot_to_tray",
+      "frame_against_pen_holder"
+    ],
+    "Home Study": [
+      "bookmark_on_book",
+      "put_glass_in_glassbox",
+      "pen"
+    ],
+    "Supermarket": [
+      "apple_from_shelf",
+      "shop"
+    ],
+    "Industrial": [
+      "install_gear",
+      "tighten_nut",
+      "peg_in_hole"
+    ],
+    "Home Dining Room": [
+      "apple_to_fruit_bowl",
+      "microwave",
+      "dish",
+      "fruit",
+      "flip_cup_collect_cookies",
+      "collect_coffee_beans"
+    ],
+    "Logistics": [
+      "bottle"
+    ]
+  },
+  "atomic_skill": {
+    "Push": [
+      "dishwasher"
+    ],
+    "Press": [
+      "put_glass_in_glassbox"
+    ],
+    "Move": [
+      "salt_to_spice_rack",
+      "remote_to_holder",
+      "apple_from_shelf",
+      "bookmark_on_book",
+      "dishwasher",
+      "perfume_to_cosmetics_rack",
+      "soap_to_dish",
+      "apple_to_fruit_bowl",
+      "bowl_to_plate",
+      "make_sandwich",
+      "teacup_to_saucer_teapot_to_tray",
+      "utensils_to_holder",
+      "microwave",
+      "dish",
+      "fruit",
+      "bottle",
+      "shop"
+    ],
+    "Pull": [
+      "dishwasher",
+      "microwave"
+    ],
+    "Grasp": [
+      "salt_to_spice_rack",
+      "remote_to_holder",
+      "apple_from_shelf",
+      "bookmark_on_book",
+      "dishwasher",
+      "perfume_to_cosmetics_rack",
+      "detergent",
+      "soap_to_dish",
+      "put_glass_in_glassbox",
+      "apple_to_fruit_bowl",
+      "install_gear",
+      "bowl_to_plate",
+      "make_sandwich",
+      "teacup_to_saucer_teapot_to_tray",
+      "frame_against_pen_holder",
+      "tighten_nut",
+      "utensils_to_holder",
+      "microwave",
+      "dish",
+      "fruit",
+      "flip_cup_collect_cookies",
+      "pen",
+      "peg_in_hole",
+      "bottle",
+      "shop",
+      "collect_coffee_beans"
+    ],
+    "Place": [
+      "salt_to_spice_rack",
+      "remote_to_holder",
+      "bookmark_on_book",
+      "dishwasher",
+      "perfume_to_cosmetics_rack",
+      "detergent",
+      "soap_to_dish",
+      "put_glass_in_glassbox",
+      "apple_to_fruit_bowl",
+      "install_gear",
+      "bowl_to_plate",
+      "make_sandwich",
+      "teacup_to_saucer_teapot_to_tray",
+      "frame_against_pen_holder",
+      "tighten_nut",
+      "utensils_to_holder",
+      "microwave",
+      "dish",
+      "fruit",
+      "flip_cup_collect_cookies",
+      "peg_in_hole",
+      "bottle",
+      "shop",
+      "collect_coffee_beans"
+    ],
+    "Sweep": [
+      "dishwasher",
+      "make_sandwich",
+      "microwave",
+      "shop",
+      "collect_coffee_beans"
+    ],
+    "Handover": [
+      "detergent",
+      "frame_against_pen_holder",
+      "fruit",
+      "flip_cup_collect_cookies",
+      "shop"
+    ],
+    "Flip": [
+      "frame_against_pen_holder",
+      "flip_cup_collect_cookies"
+    ],
+    "Pour": [
+      "fruit",
+      "flip_cup_collect_cookies"
+    ],
+    "Insert": [
+      "pen",
+      "peg_in_hole",
+      "collect_coffee_beans"
+    ]
+  },
+  "range": {
+    "Short Horizon": [
+      "salt_to_spice_rack",
+      "remote_to_holder",
+      "apple_from_shelf",
+      "bookmark_on_book",
+      "perfume_to_cosmetics_rack",
+      "soap_to_dish",
+      "put_glass_in_glassbox",
+      "apple_to_fruit_bowl",
+      "install_gear",
+      "bowl_to_plate",
+      "teacup_to_saucer_teapot_to_tray",
+      "frame_against_pen_holder",
+      "tighten_nut",
+      "utensils_to_holder",
+      "microwave",
+      "flip_cup_collect_cookies",
+      "pen",
+      "peg_in_hole",
+      "collect_coffee_beans"
+    ],
+    "Long Horizon": [
+      "dishwasher",
+      "detergent",
+      "make_sandwich",
+      "dish",
+      "fruit",
+      "bottle",
+      "shop"
+    ]
+  },
+  "precision": {
+    "Low": [
+      "salt_to_spice_rack",
+      "remote_to_holder",
+      "apple_from_shelf",
+      "bookmark_on_book",
+      "dishwasher",
+      "perfume_to_cosmetics_rack",
+      "detergent",
+      "apple_to_fruit_bowl",
+      "bowl_to_plate",
+      "frame_against_pen_holder",
+      "utensils_to_holder",
+      "microwave",
+      "fruit",
+      "shop"
+    ],
+    "Medium": [
+      "soap_to_dish",
+      "put_glass_in_glassbox",
+      "make_sandwich",
+      "teacup_to_saucer_teapot_to_tray",
+      "dish",
+      "flip_cup_collect_cookies",
+      "pen",
+      "bottle"
+    ],
+    "High": [
+      "install_gear",
+      "tighten_nut",
+      "peg_in_hole",
+      "collect_coffee_beans"
+    ]
+  },
+  "mobility": {
+    "Mobile": [
+      "salt_to_spice_rack",
+      "remote_to_holder",
+      "apple_from_shelf",
+      "bookmark_on_book",
+      "dishwasher",
+      "perfume_to_cosmetics_rack",
+      "detergent",
+      "soap_to_dish",
+      "apple_to_fruit_bowl",
+      "bowl_to_plate",
+      "make_sandwich",
+      "teacup_to_saucer_teapot_to_tray",
+      "utensils_to_holder",
+      "microwave",
+      "dish",
+      "fruit",
+      "pen",
+      "bottle",
+      "shop"
+    ],
+    "Fixed": [
+      "put_glass_in_glassbox",
+      "install_gear",
+      "frame_against_pen_holder",
+      "tighten_nut",
+      "flip_cup_collect_cookies",
+      "peg_in_hole",
+      "collect_coffee_beans"
+    ]
+  }
+}

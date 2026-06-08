@@ -95,11 +95,6 @@ def print_success(message: str) -> None:
     print(f"{icon} {colored(message, Colors.BRIGHT_GREEN)}")
 
 
-def print_warning(message: str) -> None:
-    icon = colored("!", Colors.YELLOW, Colors.BOLD)
-    print(f"{icon} {colored(message, Colors.YELLOW)}")
-
-
 # Timeout constants (in seconds)
 DEFAULT_STEP_TIMEOUT = 600  # 10 minutes
 DEFAULT_RESET_TIMEOUT = 3000  # 50 minutes
@@ -358,7 +353,7 @@ def _storage_worker_process(
                     try:
                         with task_result_path.open("r", encoding="utf-8") as f:
                             task_result = json.load(f)
-                    except (OSError, ValueError) as exc:
+                    except (OSError, json.JSONDecodeError) as exc:
                         corrupt_suffix = time.strftime("%Y%m%d-%H%M%S")
                         corrupt_path = task_result_path.with_name(
                             f"{task_result_path.stem}.corrupt-{corrupt_suffix}{task_result_path.suffix}"
@@ -730,12 +725,6 @@ class EvalClient:
             params.update(extra)
         return params
 
-    def _extract_error_detail(self, resp: requests.Response):
-        try:
-            return resp.json()
-        except ValueError:
-            return resp.text
-
     def close(self) -> None:
         """Close recorders."""
         self.close_recorders()
@@ -775,6 +764,8 @@ class EvalClient:
         if should_wait_for_drain:
             wait_start = time.time()
             self._storage_worker.wait_until_done()
+            wait_elapsed = time.time() - wait_start
+            print_info(f"Storage queue drained before reset in {wait_elapsed:.3f}s")
 
     @_retry_on_failure(max_retries=3, backoff=1.0)
     def _create_workers(self):
@@ -791,18 +782,15 @@ class EvalClient:
                 f"Create workers request timed out after {DEFAULT_CREATE_TIMEOUT}s"
             )
         if resp.status_code != 200:
-            detail = self._extract_error_detail(resp)
+            try:
+                detail = resp.json()
+            except json.JSONDecodeError:
+                detail = resp.text
             raise RuntimeError(
                 f"HTTP error when create_workers: {resp.status_code} - {detail}"
             )
 
     def reset(self):
-        try:
-            self.kill_workers()
-        except RuntimeError as exc:
-            # Reset can still recreate missing workers, so stale-worker cleanup is best-effort.
-            print_warning(f"Pre-reset kill failed: {exc}")
-
         payload = pickle.dumps(
             {"worker_ids": self.worker_ids}, protocol=pickle.HIGHEST_PROTOCOL
         )
@@ -822,7 +810,10 @@ class EvalClient:
             raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
 
         if resp.status_code != 200:
-            detail = self._extract_error_detail(resp)
+            try:
+                detail = resp.json()
+            except json.JSONDecodeError:
+                detail = resp.text
             raise RuntimeError(f"HTTP error on reset: {resp.status_code} - {detail}")
 
         obs_dict = pickle.loads(resp.content)
@@ -856,7 +847,10 @@ class EvalClient:
             raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
 
         if resp.status_code != 200:
-            detail = self._extract_error_detail(resp)
+            try:
+                detail = resp.json()
+            except json.JSONDecodeError:
+                detail = resp.text
             raise RuntimeError(
                 f"HTTP error on reset_result: {resp.status_code} - {detail}"
             )
@@ -867,7 +861,6 @@ class EvalClient:
         return result_dict
 
     def _resolve_pending_resets(self, obs_dict: dict) -> dict:
-        start = time.time()
         pending_worker_ids = [
             str(worker_id)
             for worker_id, worker_data in obs_dict.items()
@@ -899,7 +892,7 @@ class EvalClient:
 
             if pending_worker_set:
                 time.sleep(DEFAULT_RESET_POLL_INTERVAL)
-        print_info(f"Reset complete in {time.time() - start:.2f}s")
+
         return merged_obs
 
     def _step_single(self, action_dict: dict) -> tuple[dict, bool]:
@@ -921,7 +914,10 @@ class EvalClient:
             raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
 
         if resp.status_code != 200:
-            detail = self._extract_error_detail(resp)
+            try:
+                detail = resp.json()
+            except json.JSONDecodeError:
+                detail = resp.text
             raise RuntimeError(f"HTTP error from server: {resp.status_code} - {detail}")
 
         step_time = time.time() - start
@@ -1067,7 +1063,10 @@ class EvalClient:
             raise RuntimeError(f"HTTP request to server failed: {exc}") from exc
 
         if resp.status_code != 200:
-            detail = self._extract_error_detail(resp)
+            try:
+                detail = resp.json()
+            except json.JSONDecodeError:
+                detail = resp.text
             raise RuntimeError(f"HTTP error from server: {resp.status_code} - {detail}")
 
         chunk_result = pickle.loads(resp.content)
@@ -1121,7 +1120,9 @@ class EvalClient:
             for worker_data in data.values():
                 for key, value in worker_data["metric"].items():
                     result_dict[key] = value
-            self._print_eval_result(result_dict, title="Final Evaluation Result")
+            # Filter out keys with "*"
+            filtered_results = {k: v for k, v in result_dict.items() if "*" not in k}
+            self._print_eval_result(filtered_results, title="Final Evaluation Result")
             return True
         return False
 
@@ -1188,7 +1189,10 @@ class EvalClient:
             params=self._build_params(),
         )
         if resp.status_code != 200:
-            detail = self._extract_error_detail(resp)
+            try:
+                detail = resp.json()
+            except json.JSONDecodeError:
+                detail = resp.text
             raise RuntimeError(
                 f"HTTP error on kill_workers: {resp.status_code} - {detail}"
             )
