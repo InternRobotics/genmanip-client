@@ -46,115 +46,278 @@
     ]
   },
   "atomic_skill": {
-    "Push": [
-      "dishwasher"
+    "bottle": [
+      [
+        [
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
     ],
-    "Press": [
-      "put_glass_in_glassbox"
+    "detergent": [
+      [
+        [
+          ["Grasp", "Place", "Handover"],
+          ["Grasp", "Place", "Handover"],
+          ["Grasp", "Place", "Handover"]
+        ]
+      ]
     ],
-    "Move": [
-      "salt_to_spice_rack",
-      "remote_to_holder",
-      "apple_from_shelf",
-      "bookmark_on_book",
-      "dishwasher",
-      "perfume_to_cosmetics_rack",
-      "soap_to_dish",
-      "apple_to_fruit_bowl",
-      "bowl_to_plate",
-      "make_sandwich",
-      "teacup_to_saucer_teapot_to_tray",
-      "utensils_to_holder",
-      "microwave",
-      "dish",
-      "fruit",
-      "bottle",
-      "shop"
+    "dish": [
+      [
+        [
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
     ],
-    "Pull": [
-      "dishwasher",
-      "microwave"
+    "dishwasher": [
+      [
+        [
+          ["Move", "Pull", "Sweep"]
+        ]
+      ],
+      [
+        [
+          ["Move", "Push"],
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
     ],
-    "Grasp": [
-      "salt_to_spice_rack",
-      "remote_to_holder",
-      "apple_from_shelf",
-      "bookmark_on_book",
-      "dishwasher",
-      "perfume_to_cosmetics_rack",
-      "detergent",
-      "soap_to_dish",
-      "put_glass_in_glassbox",
-      "apple_to_fruit_bowl",
-      "install_gear",
-      "bowl_to_plate",
-      "make_sandwich",
-      "teacup_to_saucer_teapot_to_tray",
-      "frame_against_pen_holder",
-      "tighten_nut",
-      "utensils_to_holder",
-      "microwave",
-      "dish",
-      "fruit",
-      "flip_cup_collect_cookies",
-      "pen",
-      "peg_in_hole",
-      "bottle",
-      "shop",
-      "collect_coffee_beans"
+    "fruit": [
+      [
+        [
+          ["Grasp", "Place", "Handover"],
+          ["Grasp", "Place", "Handover"],
+          ["Grasp", "Place", "Handover"],
+          ["Move", "Grasp", "Pour"],
+          ["Move", "Grasp", "Pour"]
+        ]
+      ]
     ],
-    "Place": [
-      "salt_to_spice_rack",
-      "remote_to_holder",
-      "bookmark_on_book",
-      "dishwasher",
-      "perfume_to_cosmetics_rack",
-      "detergent",
-      "soap_to_dish",
-      "put_glass_in_glassbox",
-      "apple_to_fruit_bowl",
-      "install_gear",
-      "bowl_to_plate",
-      "make_sandwich",
-      "teacup_to_saucer_teapot_to_tray",
-      "frame_against_pen_holder",
-      "tighten_nut",
-      "utensils_to_holder",
-      "microwave",
-      "dish",
-      "fruit",
-      "flip_cup_collect_cookies",
-      "peg_in_hole",
-      "bottle",
-      "shop",
-      "collect_coffee_beans"
+    "make_sandwich": [
+      [
+        [
+          ["Move", "Grasp", "Place", "Sweep"],
+          ["Move", "Grasp", "Place", "Sweep"],
+          ["Move", "Grasp", "Place", "Sweep"],
+          ["Move", "Grasp", "Place", "Sweep"]
+        ]
+      ]
     ],
-    "Sweep": [
-      "dishwasher",
-      "make_sandwich",
-      "microwave",
-      "shop",
-      "collect_coffee_beans"
+    "microwave": [
+      [
+        [
+          ["Pull", "Grasp", "Sweep"]
+        ]
+      ],
+      [
+        [
+          ["Move", "Sweep"],
+          ["Grasp", "Place"],
+          ["Grasp", "Place"]
+        ]
+      ]
     ],
-    "Handover": [
-      "detergent",
-      "frame_against_pen_holder",
-      "fruit",
-      "flip_cup_collect_cookies",
-      "shop"
+    "pen": [
+      [
+        [
+          ["Grasp", "Insert"],
+          ["Grasp", "Insert"],
+          ["Grasp", "Insert"]
+        ]
+      ]
     ],
-    "Flip": [
-      "frame_against_pen_holder",
-      "flip_cup_collect_cookies"
+    "shop": [
+      [
+        [
+          ["Move", "Grasp", "Handover"],
+          ["Move", "Grasp", "Handover"],
+          ["Move", "Grasp", "Handover"],
+          ["Move", "Grasp", "Handover"],
+          ["Move", "Grasp", "Handover"],
+          ["Move", "Grasp", "Handover"],
+          ["Move", "Place"],
+          ["Move", "Place"],
+          ["Move", "Place"],
+          ["Move", "Place"],
+          ["Move", "Place"],
+          ["Move", "Place"]
+        ]
+      ]
     ],
-    "Pour": [
-      "fruit",
-      "flip_cup_collect_cookies"
+    "utensils_to_holder": [
+      [
+        [
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
     ],
-    "Insert": [
-      "pen",
-      "peg_in_hole",
-      "collect_coffee_beans"
+    "bookmark_on_book": [
+      [
+        [
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
+    ],
+    "soap_to_dish": [
+      [
+        [
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
+    ],
+    "apple_to_fruit_bowl": [
+      [
+        [
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
+    ],
+    "remote_to_holder": [
+      [
+        [
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
+    ],
+    "perfume_to_cosmetics_rack": [
+      [
+        [
+          ["Move", "Grasp"]
+        ]
+      ],
+      [
+        [
+          ["Insert"]
+        ]
+      ]
+    ],
+    "salt_to_spice_rack": [
+      [
+        [
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
+    ],
+    "apple_from_shelf": [
+      [
+        [
+          ["Move", "Grasp"]
+        ]
+      ]
+    ],
+    "teacup_to_saucer_teapot_to_tray": [
+      [
+        [
+          ["Move", "Grasp", "Place"],
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
+    ],
+    "bowl_to_plate": [
+      [
+        [
+          ["Move", "Grasp", "Place"]
+        ],
+        [
+          ["Move", "Grasp", "Place"]
+        ],
+        [
+          ["Move", "Grasp", "Place"]
+        ]
+      ]
+    ],
+    "collect_coffee_beans": [
+      [
+        [
+          ["Grasp", "Place"],
+          ["Grasp", "Sweep"],
+          ["Grasp", "Sweep"],
+          ["Grasp", "Sweep"],
+          ["Grasp", "Sweep"],
+          ["Grasp", "Sweep"],
+          ["Grasp", "Sweep"],
+          ["Grasp", "Sweep"]
+        ]
+      ]
+    ],
+    "flip_cup_collect_cookies": [
+      [
+        [
+          ["Grasp", "Place", "Flip", "Handover"],
+          ["Grasp", "Pour"],
+          ["Grasp", "Pour"],
+          ["Grasp", "Pour"],
+          ["Grasp", "Pour"],
+          ["Grasp", "Pour"]
+        ]
+      ]
+    ],
+    "frame_against_pen_holder": [
+      [
+        [
+          ["Grasp", "Place"]
+        ]
+      ],
+      [
+        [
+          ["Grasp", "Place", "Handover", "Flip"],
+          ["Grasp", "Place", "Handover", "Flip"]
+        ]
+      ]
+    ],
+    "install_gear": [
+      [
+        [
+          ["Grasp", "Place"],
+          ["Grasp", "Place", "Press"]
+        ]
+      ]
+    ],
+    "peg_in_hole": [
+      [
+        [
+          ["Grasp", "Place"],
+          ["Grasp", "Place", "Insert"]
+        ]
+      ]
+    ],
+    "put_glass_in_glassbox": [
+      [
+        [
+          ["Press"],
+          ["Press"],
+          ["Grasp", "Place"]
+        ]
+      ]
+    ],
+    "tighten_nut": [
+      [
+        [
+          ["Grasp", "Place"]
+        ]
+      ],
+      [
+        [
+          ["Place", "Press"]
+        ]
+      ]
     ]
   },
   "range": {

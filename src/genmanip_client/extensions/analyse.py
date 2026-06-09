@@ -113,7 +113,7 @@ def merge_reference(payload: dict[str, Any], reference: dict[str, Any] | None = 
     return out
 
 
-def load_default_cluster_map() -> dict[str, dict[str, list[str]]] | None:
+def load_default_cluster_map() -> dict[str, dict[str, Any]] | None:
     """Return the EBench taxonomy bundled next to this module, or None."""
     if not _BUNDLED_CLUSTER_MAP.is_file():
         return None
@@ -124,13 +124,22 @@ def load_default_cluster_map() -> dict[str, dict[str, list[str]]] | None:
         return None
 
 
-def prune_cluster_map(cluster_map: dict[str, dict[str, list[str]]],
-                      present_tasks: set[str]) -> dict[str, dict[str, list[str]]]:
+def prune_cluster_map(cluster_map: dict[str, dict[str, Any]],
+                      present_tasks: set[str]) -> dict[str, dict[str, Any]]:
     """Drop clusters whose tasks aren't in `present_tasks`; drop empty
     categories. Keeps the report focused on what we can actually compute."""
-    out: dict[str, dict[str, list[str]]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for cat, clusters in cluster_map.items():
-        kept: dict[str, list[str]] = {}
+        kept: dict[str, Any] = {}
+
+        if cat == "atomic_skill":
+            for task, skill_tree in clusters.items():
+                if task in present_tasks:
+                    kept[task] = skill_tree
+            if kept:
+                out[cat] = kept
+            continue
+
         for cn, task_list in clusters.items():
             inter = [t for t in task_list if t in present_tasks]
             if inter:
@@ -138,6 +147,72 @@ def prune_cluster_map(cluster_map: dict[str, dict[str, list[str]]],
         if kept:
             out[cat] = kept
     return out
+
+
+def _collect_atomic_skill_observations(
+    metric_scores: list[Any], skill_groups: list[Any]
+) -> list[tuple[str, float, float]]:
+    observations: list[tuple[str, float, float]] = []
+    reached = True
+    for score_stage, skill_stage in zip(metric_scores, skill_groups):
+        if not reached:
+            break
+        if not isinstance(score_stage, list) or not isinstance(skill_stage, list):
+            break
+        stage_success = False
+        alt_success: list[bool] = []
+        for alt_scores in score_stage:
+            success = (
+                isinstance(alt_scores, list) and alt_scores and
+                all(isinstance(v, (int, float)) and v != 0 for v in alt_scores)
+            )
+            alt_success.append(success)
+            if success:
+                stage_success = True
+
+        if stage_success:
+            for alt_success_flag, alt_skills in zip(alt_success, skill_stage):
+                if not alt_success_flag or not isinstance(alt_skills, list):
+                    continue
+                for skill_list in alt_skills:
+                    if not isinstance(skill_list, list):
+                        continue
+                    for skill in skill_list:
+                        if isinstance(skill, str):
+                            observations.append((skill, 1.0, 1.0))
+        else:
+            for alt_skills in skill_stage:
+                if not isinstance(alt_skills, list):
+                    continue
+                for skill_list in alt_skills:
+                    if not isinstance(skill_list, list):
+                        continue
+                    for skill in skill_list:
+                        if isinstance(skill, str):
+                            observations.append((skill, 0.0, 0.0))
+
+        reached = stage_success
+    return observations
+
+
+def _normalize_atomic_skill_cluster_map(task_map: dict[str, Any],) -> dict[str, list[str]]:
+    def extract_skills(obj: Any) -> set[str]:
+        if isinstance(obj, str):
+            return {obj}
+
+        if isinstance(obj, list):
+            skills = set()
+            for item in obj:
+                skills.update(extract_skills(item))
+            return skills
+
+        return set()
+
+    skills = set()
+    for stages in task_map.values():
+        skills.update(extract_skills(stages))
+
+    return {skill: [skill] for skill in skills}
 
 
 # Display names for the bundled taxonomy categories
@@ -217,6 +292,7 @@ def _records_from_result_info(run_id: str, run_dir: Path) -> list[dict[str, Any]
             score = float(d["score"])
         except (KeyError, TypeError, ValueError):
             continue
+        metric_scores = d.get("log_info", {}).get("metric_score")
         # path: .../<task_with_split>/<seed>/result_info.json
         seed_dir = ri.parent
         task_dir = seed_dir.parent
@@ -224,6 +300,7 @@ def _records_from_result_info(run_id: str, run_dir: Path) -> list[dict[str, Any]
         out.append({
             "run_id": run_id, "task": base, "split": split,
             "seed": seed_dir.name, "sr": sr, "score": score,
+            "metric_scores": metric_scores,
         })
     return out
 
@@ -514,6 +591,30 @@ def aggregate(records: list[dict[str, Any]],
         for r in records:
             per_rst[(r["run_id"], r["split"], r["task"])]["sr"].append(r["sr"])
             per_rst[(r["run_id"], r["split"], r["task"])]["score"].append(r["score"])
+
+        # skill-level observations for atomic_skill new structure:
+        atomic_skill_records: list[dict[str, Any]] = []
+        atomic_skill_task_map = cluster_map.get("atomic_skill")
+        if atomic_skill_task_map:
+            cluster_map["atomic_skill"] = _normalize_atomic_skill_cluster_map(
+                atomic_skill_task_map
+            )
+            for r in records:
+                task = r["task"]
+                metric_scores = r.get("metric_scores")
+
+                if task not in atomic_skill_task_map or not isinstance(metric_scores, list):
+                    continue
+
+                for skill, sr, score in _collect_atomic_skill_observations(
+                    metric_scores, atomic_skill_task_map[task]
+                ):
+                    nr = dict(r)
+                    nr["skill"] = skill
+                    nr["sr"] = sr
+                    nr["score"] = score
+                    atomic_skill_records.append(nr)
+
         # mean per task across seeds, then mean across tasks in cluster
         per_task_mean: dict[tuple[str, str, str], dict[str, float]] = {}
         for k, v in per_rst.items():
@@ -523,9 +624,20 @@ def aggregate(records: list[dict[str, Any]],
             }
         for (run, split, task), means in per_task_mean.items():
             for cat, clusters in cluster_map.items():
+                if cat == "atomic_skill":
+                    continue
                 for cn, task_list in clusters.items():
                     if task in task_list:
                         agg_cluster_raw[(run, split, cat, cn)].append(means)
+
+        if atomic_skill_task_map:
+            for r in atomic_skill_records:
+                for cn, skill_list in cluster_map.get("atomic_skill", {}).items():
+                    if r["skill"] in skill_list:
+                        agg_cluster_raw[(r["run_id"], r["split"], "atomic_skill", cn)].append({
+                            "sr": r["sr"], "score": r["score"]
+                        })
+
         agg_cluster: dict[str, Any] = {}
         for (run, split, cat, cn), vals in agg_cluster_raw.items():
             srs = [v["sr"] for v in vals]
