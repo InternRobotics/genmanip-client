@@ -103,6 +103,46 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Request timeout seconds (default: 30)",
     )
 
+    online_stop = online_subparsers.add_parser(
+        "stop",
+        help="Stop an online evaluation run on the eval server",
+        description="Send stop request to the eval server URL with run_id and user_id",
+    )
+    online_stop.add_argument(
+        "--url",
+        required=True,
+        help=(
+            "Eval server URL. If this is a predict URL, the client will derive "
+            "the /stop endpoint automatically."
+        ),
+    )
+    online_stop.add_argument(
+        "--token",
+        default=None,
+        help="Optional API token for the eval server",
+    )
+    online_stop.add_argument(
+        "--run_id",
+        default=None,
+        help="Run ID to stop. For online eval this is usually the task_id.",
+    )
+    online_stop.add_argument(
+        "--task_id",
+        default=None,
+        help="Alias of --run_id for online eval task IDs",
+    )
+    online_stop.add_argument(
+        "--user_id",
+        required=True,
+        help="User ID to include in the stop request",
+    )
+    online_stop.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Request timeout seconds (default: 30)",
+    )
+
     online_submit = online_subparsers.add_parser(
         "submit",
         help="Create task and wait until ready",
@@ -178,10 +218,11 @@ def run(args: argparse.Namespace) -> int:
     if args.online_command is None:
         print("Error: online subcommand required", file=sys.stderr)
         return 1
+    client_base_url = getattr(args, "base_url", None) or getattr(args, "url", None)
     client = OnlineEvaluationClient(
-        base_url=args.base_url,
-        token=args.token,
-        timeout=args.timeout,
+        base_url=client_base_url,
+        token=getattr(args, "token", None),
+        timeout=getattr(args, "timeout", 30.0),
     )
     try:
         if args.online_command == "create":
@@ -198,6 +239,17 @@ def run(args: argparse.Namespace) -> int:
             return 0
         if args.online_command == "ready":
             resp = client.ready(task_id=args.task_id)
+            print(json.dumps(resp, indent=2))
+            return 0
+        if args.online_command == "stop":
+            run_id = args.run_id or args.task_id
+            if not run_id:
+                raise RuntimeError("Either --run_id or --task_id is required")
+            resp = client.stop(
+                url=args.url,
+                run_id=run_id,
+                user_id=args.user_id,
+            )
             print(json.dumps(resp, indent=2))
             return 0
         if args.online_command == "submit":
