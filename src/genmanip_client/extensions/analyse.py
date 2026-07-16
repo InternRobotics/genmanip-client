@@ -340,8 +340,8 @@ def load_run_episode_results(run_dir: Path) -> list[dict[str, Any]]:
     """Walk a single run directory, returning per-(task,seed) records.
 
     Tries multiple known layouts (in order of preference):
-      A. <run>/result.json                             — gmp eval aggregated output
-      B. <run>/.../<task>/<seed>/result_info.json      — per-episode raw output
+      A. <run>/.../<task>/<seed>/result_info.json      — per-episode raw output
+      B. <run>/result.json                             — gmp eval aggregated output
       C. <run>/<task>/episode_result.json              — genmanip_client's own output
     """
     run_dir = Path(run_dir).resolve()
@@ -349,17 +349,18 @@ def load_run_episode_results(run_dir: Path) -> list[dict[str, Any]]:
         raise FileNotFoundError(f"run dir not found: {run_dir}")
     run_id = run_dir.name
 
-    # Layout A: aggregated result.json at run root
+    # Layout A: prefer per-episode records because they retain metric_score,
+    # which is required for atomic-skill aggregation.
+    recs = _records_from_result_info(run_id, run_dir)
+    if recs:
+        return recs
+
+    # Layout B: fall back to the aggregated result when raw episodes are absent.
     rj = run_dir / "result.json"
     if rj.is_file():
         recs = _records_from_result_json(run_id, rj)
         if recs:
             return recs
-
-    # Layout B: per-episode result_info.json files
-    recs = _records_from_result_info(run_id, run_dir)
-    if recs:
-        return recs
 
     # Layout C: episode_result.json under each task subdir
     return _records_from_episode_result(run_id, run_dir)
