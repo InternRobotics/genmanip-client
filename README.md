@@ -34,6 +34,7 @@ gmp --help
 - `gmp clean`: Clean generated mesh cache, eval results, logs, and recursive lock/tmp leftovers.
 - `gmp online create`: Create an online evaluation task.
 - `gmp visualize`: Browse eval results and replay episodes in the Rerun viewer.
+- `gmp analyse` (`gmp analyze`): Generate an interactive HTML report from local eval results.
 - `gmp online ready`: Check if an online evaluation task is ready.
 - `gmp online submit`: Create an online evaluation task and poll until ready.
 
@@ -66,6 +67,12 @@ gmp visualize
 
 # Visualize with an explicit project root on a custom port
 gmp visualize --project_root /path/to/GenManip-Sim --port 55088
+
+# Analyse all runs and generate analyse_report.html
+gmp analyse --project_root /path/to/GenManip-Sim
+
+# Analyse selected runs, write a custom report, and open it
+gmp analyse RUN_ID_A RUN_ID_B -o reports/comparison.html --open
 
 # Show cached .rrd files that would be removed, then remove them
 gmp visualize --flush-cache --dry-run
@@ -254,6 +261,55 @@ gmp visualize --project_root /mnt/workspace/projects/GenManip-Sim
 
 # Then open https://localhost:55077/ in your local browser
 ```
+
+## Evaluation Analysis Report
+
+`gmp analyse` (also available as `gmp analyze`) aggregates one or more
+evaluation runs into an interactive HTML report. The report includes top-line
+metrics, train-to-test scatter plots, cluster radar and bar charts,
+generalization gaps, and a per-task success-rate heatmap.
+
+By default, the command:
+
+- Discovers every run under `<project_root>/saved/eval_results/*/*`
+- Writes `./analyse_report.html`
+- Loads the bundled EBench-v0.2-Generalist task taxonomy and removes clusters
+  that do not overlap with the selected tasks
+- Adds the bundled Pi0-200k, Pi0.5-200k, XVLA-200k, and InternVLA-A1-200k
+  reference results for side-by-side comparison
+- Falls back to a reference-only report when no usable local runs are found
+
+The generated HTML stores the report data in the file itself, but loads Plotly
+and export-related assets from CDNs when opened.
+
+### Basic usage
+
+```bash
+# Discover and analyse all runs from the current project
+gmp analyse
+
+# Use a different GenManip-Sim project root
+gmp analyse --project_root /path/to/GenManip-Sim
+
+# Select runs by run ID
+gmp analyse RUN_ID_A RUN_ID_B
+
+# Paths to run directories are also accepted
+gmp analyse \
+  /path/to/GenManip-Sim/saved/eval_results/EBench/RUN_ID_A \
+  /path/to/GenManip-Sim/saved/eval_results/EBench/RUN_ID_B
+
+# Customize the output and page title, then open it in the default browser
+gmp analyse RUN_ID_A RUN_ID_B \
+  --output reports/comparison.html \
+  --title "Policy comparison" \
+  --open
+```
+
+A run directory may contain per-episode `result_info.json` files, a top-level
+`result.json`, or per-task `episode_result.json` files. Per-episode results are
+preferred when available because they retain the metric details needed for
+atomic-skill analysis.
 
 ## Cleanup
 
