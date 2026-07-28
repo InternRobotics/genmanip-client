@@ -463,13 +463,13 @@ function init(){
 
   $('gp-add').addEventListener('click', () => {
     const name = $('gp-name').value.trim();
-    if (!name) { $('gp-name').focus(); return; }
-    let members = [...state.selection];
-    if (members.length === 0 && state.matched.size > 0) {
-      members = [...state.matched].filter(r => !isAssigned(r));
-    }
-    if (members.length === 0) {
-      alert('Select at least one run, or type a regex that matches some runs.');
+    const members = [...state.selection];
+    const missing = [];
+    if (!name) missing.push('Enter a group name.');
+    if (members.length === 0) missing.push('Select at least one experiment result.');
+    if (missing.length) {
+      alert('Cannot add experiment group:\n\n' + missing.join('\n'));
+      if (!name) $('gp-name').focus();
       return;
     }
     const color = $('gp-color').value || PALETTE[state.groups.length % PALETTE.length];
