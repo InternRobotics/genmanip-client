@@ -1,6 +1,26 @@
 from genmanip_client.extensions.analyse import aggregate
 
 
+def test_merge_reference_preserves_generalization_and_local_precedence():
+    from genmanip_client.extensions.analyse import merge_reference
+
+    local_metrics = {"test_mini_score": {"Object": {"mean": 0.8}}}
+    reference_metrics = {"test_mini_score": {"Object": {"mean": 0.5}}}
+    local = {"runs": ["local"], "agg_generalize": {"local": local_metrics}}
+    reference = {
+        "runs": ["local", "reference"],
+        "agg_generalize": {
+            "local": reference_metrics,
+            "reference": reference_metrics,
+        },
+    }
+
+    merged = merge_reference(local, reference)
+
+    assert merged["agg_generalize"]["local"] == local_metrics
+    assert merged["agg_generalize"]["reference"] == reference_metrics
+
+
 def test_aggregate_atomic_skill_new_structure():
     records = [
         {

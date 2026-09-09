@@ -87,7 +87,7 @@ def merge_reference(payload: dict[str, Any], reference: dict[str, Any] | None = 
             out["splits"].append(s); seen_s.add(s)
 
     # Per-run aggregates: copy bundled rows that don't collide with local runs.
-    for sect in ("agg_top", "agg_task", "agg_cluster"):
+    for sect in ("agg_top", "agg_task", "agg_cluster", "agg_generalize"):
         out.setdefault(sect, {})
         for run, val in (reference.get(sect) or {}).items():
             if run not in out[sect]:

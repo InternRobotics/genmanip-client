@@ -16,14 +16,14 @@
   html,body{background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
   .wrap{max-width:1320px;margin:0 auto;padding:36px 32px 100px}
   header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:24px}
-  h1{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:36px;line-height:1.08;letter-spacing:-.012em;margin:0 0 8px}
+  h1{font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:36px;line-height:1.08;letter-spacing:-.012em;margin:0 0 8px}
   .lede{color:var(--muted);font-size:15px;max-width:880px;line-height:1.55;margin:0}
   .meta{display:flex;gap:22px;color:var(--muted);font-size:13px;margin-top:14px;flex-wrap:wrap}
-  .meta b{color:var(--ink);font-weight:600}
+  .meta b{color:var(--ink);font-weight:700}
   section{margin-top:40px}
   .section-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;border-top:1px solid var(--line);padding-top:28px}
   section:first-of-type .section-head{border-top:none;padding-top:0}
-  h2{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:24px;letter-spacing:-.005em;margin:0}
+  h2{font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:24px;letter-spacing:-.005em;margin:0}
   .sub{color:var(--muted);font-size:13px}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 18px 8px;box-shadow:0 1px 2px rgba(0,0,0,.02);overflow:hidden;min-width:0;position:relative}
   .panel > .js-plotly-plot, .panel > div:not(.export-bar):not(.svg-export-btn){width:100% !important;min-width:0}
@@ -60,19 +60,19 @@
     text-align:center;
   }
   .empty-banner h3{
-    font-family:'Fraunces',Georgia,serif; font-weight:600;
+    font-family:'Fraunces',Georgia,serif; font-weight:700;
     font-size:18px; letter-spacing:-.005em; color:#1F2937; margin-bottom:6px;
   }
   .empty-banner p{ font-size:13px; color:#6B7280; max-width:620px; margin:0 auto; line-height:1.55; }
-  .empty-banner code{ font-family:'JetBrains Mono',monospace; font-size:12px; color:#1F2937;
+  .empty-banner code{ font-family:'JetBrains Mono',monospace; font-size:14px; color:#1F2937;
     background:#fff; padding:1px 6px; border-radius:4px; border:1px solid var(--line); }
   .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   @media(max-width:980px){.grid-2{grid-template-columns:1fr}}
   .legend{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 18px}
-  .pill{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:#374151;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pill{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;color:#374151;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
-  .footnote{color:var(--muted);font-size:12.5px;margin-top:8px;line-height:1.5;max-width:1100px}
-  .hint{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);background:#F4F4F5;padding:1px 6px;border-radius:4px}
+  .footnote{color:var(--muted);font-size:14.5px;margin-top:8px;line-height:1.5;max-width:1100px}
+  .hint{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted);background:#F4F4F5;padding:1px 6px;border-radius:4px}
 
   /* ---- Groups panel ---- */
   .gp{
@@ -82,17 +82,17 @@
   }
   .gp summary{
     display:flex; align-items:center; gap:10px; cursor:pointer;
-    list-style:none; font-weight:600; font-size:14px;
+    list-style:none; font-weight:700; font-size:14px;
     padding:2px 0;
   }
   .gp summary::-webkit-details-marker{display:none}
   .gp summary::before{
-    content:'▸'; color:var(--muted); font-size:12px;
+    content:'▸'; color:var(--muted); font-size:14px;
     transition:transform 120ms ease; display:inline-block;
   }
   .gp[open] summary::before{ transform:rotate(90deg); }
   .gp summary .badge{
-    margin-left:auto; font-weight:500; font-size:12px;
+    margin-left:auto; font-weight:500; font-size:14px;
     color:var(--muted); background:#F3F4F6; padding:2px 9px; border-radius:999px;
   }
   .gp-body{ padding-top:12px; display:flex; flex-direction:column; gap:12px; }
@@ -120,9 +120,9 @@
   .gp-btn-primary:hover{ background:#6A5BC2; border-color:#6A5BC2; }
   .gp-btn-ghost{ color:var(--muted); }
   .gp-btn-mini{
-    padding:2px 7px; font-size:11px; border-radius:5px;
+    padding:2px 7px; font-size:13px; border-radius:5px;
   }
-  .gp-counter{ font-size:12px; color:var(--muted); }
+  .gp-counter{ font-size:14px; color:var(--muted); }
 
   .run-list{
     display:flex; flex-wrap:wrap; gap:6px;
@@ -134,7 +134,7 @@
     display:inline-flex; align-items:center; gap:6px;
     padding:3px 9px; border-radius:999px;
     border:1px solid var(--line); background:#fff;
-    font-family:'JetBrains Mono',monospace; font-size:11.5px;
+    font-family:'JetBrains Mono',monospace; font-size:13.5px;
     color:#374151; cursor:pointer; user-select:none;
     transition: background 100ms;
   }
@@ -144,7 +144,7 @@
   .run-tag.assigned{
     opacity:0.5; cursor:not-allowed;
   }
-  .run-tag .grp{ font-weight:600; color:var(--accent); font-size:10.5px; }
+  .run-tag .grp{ font-weight:700; color:var(--accent); font-size:13.5px; }
 
   .active-groups{ display:flex; flex-direction:column; gap:6px; }
   .active-group{
@@ -158,12 +158,12 @@
   }
   .active-group .swatch:hover{ transform: scale(1.10); box-shadow: 0 0 0 2px rgba(123,108,217,0.25); }
   .active-group .name{
-    flex:0 1 220px; min-width:0; font-weight:600; font-size:13px; color:#111827;
+    flex:0 1 220px; min-width:0; font-weight:700; font-size:13px; color:#111827;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  .active-group .ct{ font-size:12px; color:var(--muted); }
+  .active-group .ct{ font-size:14px; color:var(--muted); }
   .active-group .members{
-    flex:1; font-family:'JetBrains Mono',monospace; font-size:11px;
+    flex:1; font-family:'JetBrains Mono',monospace; font-size:13px;
     color:#6B7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
 </style>
@@ -267,7 +267,7 @@
 <section id="sec_heatmap" style="display:none">
   <div class="section-head">
     <h2 id="heatmap_title">6. Per-task SR heatmap</h2>
-    <span class="sub">Tasks × (group, split) — darker = higher SR</span>
+    <span class="sub">Tasks × groups · Test by default · numbers = SR (%)</span>
   </div>
   <div class="panel"><div id="heatmap"></div></div>
 </section>
@@ -417,7 +417,7 @@ function init(){
 
   function renderActiveGroups(){
     if (state.groups.length === 0) {
-      elActive.innerHTML = '<div style="color:#9CA3AF;font-size:12.5px;font-style:italic;padding:6px 4px">' +
+      elActive.innerHTML = '<div style="color:#9CA3AF;font-size:14.5px;font-style:italic;padding:6px 4px">' +
                            'No groups yet. Select runs above (or type a regex) and click "Add group" to populate the charts.</div>';
     } else {
       elActive.innerHTML = state.groups.map((g, i) => {
@@ -772,6 +772,34 @@ function init(){
     });
   }
 
+  // Copy the exact computed web typography into Plotly's exported SVG so
+  // PDF text matches the HTML even when the browser styling came from CSS.
+  function _copyComputedTextStyles(sourceRoot, targetRoot){
+    if (!sourceRoot || !targetRoot) return;
+    const source = sourceRoot.querySelectorAll("text, tspan");
+    const target = targetRoot.querySelectorAll("text, tspan");
+    const count = Math.min(source.length, target.length);
+    for (let i = 0; i < count; i++) {
+      const cs = getComputedStyle(source[i]);
+      target[i].style.fontFamily = cs.fontFamily;
+      target[i].style.fontSize = cs.fontSize;
+      target[i].style.fontWeight = cs.fontWeight;
+      target[i].style.fontStyle = cs.fontStyle;
+      target[i].style.letterSpacing = cs.letterSpacing;
+    }
+  }
+
+  // Plotly annotations need an explicit registered bold face for svg2pdf.
+  function _forceExportAnnotationBold(rootEl){
+    if (!rootEl) return;
+    rootEl.querySelectorAll(".annotation-text, .annotation text, .annotation-text tspan, .annotation tspan").forEach(el => {
+      el.setAttribute("font-family", "Inter");
+      el.setAttribute("font-weight", "bold");
+      el.style.fontFamily = "Inter";
+      el.style.fontWeight = "bold";
+    });
+  }
+
   // Vector PDF export: Plotly.toImage(svg) → parse → svg2pdf → jsPDF.save().
   async function exportPDF(div, baseName){
     if (typeof window.jspdf === 'undefined' || typeof window.svg2pdf === 'undefined') {
@@ -801,6 +829,9 @@ function init(){
     if (!svgEl) { document.body.removeChild(tmp); throw new Error('No <svg> in Plotly output'); }
     svgEl.setAttribute('width', w);
     svgEl.setAttribute('height', h);
+    const liveSvg = div.querySelector('svg.main-svg') || div.querySelector('svg');
+    _copyComputedTextStyles(liveSvg, svgEl);
+    _forceExportAnnotationBold(svgEl);
     try {
       // Force every text element's font-family to a single registered family
       // BEFORE svg2pdf parses the SVG. svg2pdf's built-in matcher (and even
@@ -858,45 +889,64 @@ function init(){
     const allTops = meanMat.flatMap((row,gi) =>
       row.map((v,si) => v==null ? 0 : (v + (stdMat[gi][si]||0)) * 100));
     const yMax = Math.max(5, Math.ceil(Math.max(...allTops) * 1.18));
-    const pad  = yMax * 0.025;
+    const pad  = yMax * 0.04;
 
     const traces = view.map((g, gi) => ({
       type:'bar', name: g.tag,
       x: splitLabels, y: meanMat[gi].map(v => v==null?0:v*100),
       marker:{color: g.color},
       error_y:{type:'data', array: stdMat[gi].map(s => s*100), color:'#374151', thickness:1.2, width:5},
-      hovertemplate: '<b>'+escapeHtml(g.tag)+'</b> · %{x}<br>'+label+': %{y:.2f}%<extra></extra>'
+      customdata: stdMat[gi].map(s => s*100),
+      hovertemplate: '<b>'+escapeHtml(g.tag)+'</b> · %{x}<br>'+label+': %{y:.2f}%<br>Std: %{customdata:.2f}%<extra></extra>'
     }));
-    // Numeric labels positioned above (mean+std), grouped-bar-aware.
-    const annots = [];
-    view.forEach((g, gi) => {
-      splits.forEach((sp, si) => {
-        const m = meanMat[gi][si];
-        if (m == null) return;
-        const xCenter = si + (gi - (ngrp-1)/2) * slot;
-        annots.push({
-          x: xCenter, y: (m + (stdMat[gi][si]||0)) * 100 + pad,
-          xref:'x', yref:'y',
-          text: (m*100).toFixed(1) + '%',
-          showarrow:false,
-          font:{family:'Inter', size: ngrp>5?9:10, color:'#111827', weight:600}
+    function buildTopAnnotations(plotDiv){
+      const visible = [];
+      for (let gi = 0; gi < view.length; gi++) {
+        if (!plotDiv || plotDiv.data[gi]?.visible !== 'legendonly') visible.push(gi);
+      }
+      const count = visible.length;
+      if (!count) return [];
+      const visibleSlot = groupWidth / count;
+      const fontSize = 13;
+      const out = [];
+      visible.forEach((gi, activeIndex) => {
+        splits.forEach((sp, si) => {
+          const m = meanMat[gi][si];
+          if (m == null) return;
+          out.push({
+            x: si + (activeIndex - (count-1)/2) * visibleSlot,
+            y: (m + (stdMat[gi][si]||0)) * 100 + pad,
+            xref:'x', yref:'y', text:(m*100).toFixed(1), showarrow:false,
+            font:{family:'Inter SemiBold, Inter, sans-serif',size:fontSize,color:'#111827',weight:700}
+          });
         });
       });
-    });
+      return out;
+    }
+    const annots = buildTopAnnotations(null);
 
     Plotly.react(divId, traces, {
       autosize:true, barmode:'group',
       bargap:0.22, bargroupgap:0.05,
-      height:360, margin:{l:60,r:14,t:30,b:50},
+      height:430, margin:{l:70,r:34,t:105,b:54},
       paper_bgcolor:'#fff', plot_bgcolor:'#fff',
-      title:{text:label,font:{family:'Fraunces',size:16,color:'#111827',weight:600},x:0.02,xanchor:'left',y:0.98,yanchor:'top'},
-      xaxis:{tickfont:{size:12,color:'#111827'},fixedrange:true},
-      yaxis:{title:{text:label+' (%)',font:{size:12,color:'#6B7280'}},
-             range:[0,yMax],gridcolor:'#F1F2F4',ticksuffix:'%',fixedrange:true,tickfont:{size:11,color:'#6B7280'}},
-      legend:{orientation:'h',y:1.18,x:1,xanchor:'right',font:{size:12}},
+      font:{family:'Inter SemiBold, Inter, sans-serif',size:13,color:'#111827',weight:700},
+      title:{text:label,font:{family:'Fraunces',size:18,color:'#111827',weight:700},x:0.02,xanchor:'left',y:0.98,yanchor:'top'},
+      xaxis:{tickfont:{family:'Inter, sans-serif',size:14,color:'#111827'},fixedrange:true},
+      yaxis:{title:{text:label+' (%)',font:{family:'Inter SemiBold, Inter, sans-serif',size:14,color:'#374151',weight:700}},
+             range:[0,yMax],gridcolor:'#F1F2F4',ticksuffix:'%',fixedrange:true,tickfont:{family:'Inter, sans-serif',size:13,color:'#4B5563'}},
+      legend:{orientation:'h',y:1.20,x:0.5,xanchor:'center',font:{family:'Inter, sans-serif',size:13,color:'#111827'}},
       showlegend: view.length <= 8,
       annotations: annots,
-    }, {displayModeBar:false, responsive:true});
+    }, {displayModeBar:false, responsive:true}).then(plotDiv => {
+      if (plotDiv._topLabelHandler && plotDiv.removeListener) {
+        plotDiv.removeListener('plotly_restyle', plotDiv._topLabelHandler);
+      }
+      plotDiv._topLabelHandler = () => requestAnimationFrame(() => {
+        Plotly.relayout(plotDiv, {annotations: buildTopAnnotations(plotDiv)});
+      });
+      plotDiv.on('plotly_restyle', plotDiv._topLabelHandler);
+    });
   }
 
   // ----------- Scatter -----------------------------------------------------
@@ -945,7 +995,7 @@ function init(){
           x: seedX, y: seedY,
           marker:{color: g.color, size: 6, opacity: 0.35, line:{width:0}},
           customdata: seedHover,
-          hovertemplate: '<b>'+escapeHtml(g.tag)+'</b> · seed<br>%{customdata}<br>VT: %{x:.2f}%<br>TM: %{y:.2f}%<extra></extra>',
+        hovertemplate: '<b>'+escapeHtml(g.tag)+'</b> · seed<br>%{customdata}<br>VT: %{x:.2f}%<br>TM: %{y:.2f}%<extra></extra>',
           showlegend:false, cliponaxis:false});
       }
       if (memX.length > 1) {
@@ -953,7 +1003,7 @@ function init(){
           x: memX, y: memY,
           marker:{color: g.color, size: 8, opacity: 0.65, line:{color:'#fff', width:1}},
           customdata: memHover,
-          hovertemplate: '<b>'+escapeHtml(g.tag)+'</b> · run<br>%{customdata}<br>VT: %{x:.2f}%<br>TM: %{y:.2f}%<extra></extra>',
+        hovertemplate: '<b>'+escapeHtml(g.tag)+'</b> · run<br>%{customdata}<br>VT: %{x:.2f}%<br>TM: %{y:.2f}%<extra></extra>',
           showlegend:false, cliponaxis:false});
       }
       // ---- Group mean dot (markers only — label is an annotation) --------
@@ -981,7 +1031,7 @@ function init(){
     const annots = [
       {x: hi - span*0.04, y: hi - span*0.04, xref:'x', yref:'y',
        text:'y = x', showarrow:false,
-       font:{size:11, color:'#9CA3AF', style:'italic'}}
+       font:{size:13, color:'#9CA3AF', style:'italic'}}
     ];
     // Plain text labels — same look as the old `mode:'markers+text'` style
     // (top-right of the dot, no chip / border / arrow) — but as annotations
@@ -993,7 +1043,7 @@ function init(){
         showarrow: false,
         xanchor: 'left', yanchor: 'bottom',
         xshift: 8, yshift: 8,
-        font:{family:'Inter', size:12, color:'#111827', weight:600},
+        font:{family:'Inter', size:14, color:'#111827', weight:700},
         captureevents: false,
       });
     });
@@ -1002,12 +1052,13 @@ function init(){
       autosize:true, height:380,
       margin:{l:68, r:30, t:18, b:54},
       paper_bgcolor:'#fff', plot_bgcolor:'#fff',
-      xaxis:{title:{text:'Validation-Train · '+label,font:{size:12,color:'#6B7280'}},
-             range:[lo,hi],gridcolor:'#F1F2F4',ticksuffix:'%',fixedrange:true,tickfont:{size:11,color:'#6B7280'},
+      font:{family:'Inter SemiBold, Inter, sans-serif',size:13,color:'#111827',weight:700},
+      xaxis:{title:{text:'Validation-Train · '+label,font:{size:14,color:'#6B7280'}},
+             range:[lo,hi],gridcolor:'#F1F2F4',ticksuffix:'%',fixedrange:true,tickfont:{size:13,color:'#6B7280'},
              automargin:true},
-      yaxis:{title:{text:'Test · '+label,font:{size:12,color:'#6B7280'}},
+      yaxis:{title:{text:'Test · '+label,font:{size:14,color:'#6B7280'}},
              range:[lo,hi],gridcolor:'#F1F2F4',ticksuffix:'%',fixedrange:true,
-             scaleanchor:'x',scaleratio:1,tickfont:{size:11,color:'#6B7280'},
+             scaleanchor:'x',scaleratio:1,tickfont:{size:13,color:'#6B7280'},
              automargin:true},
       annotations: annots,
     }, {displayModeBar:false, responsive:true});
@@ -1046,18 +1097,19 @@ function init(){
       autosize:true,
       height: Math.max(440, Math.min(640, 60 + 32 * radarLabels.length)),
       margin:{l:30,r:30,t:30,b:60}, paper_bgcolor:'#fff',
+      font:{family:'Inter SemiBold, Inter, sans-serif',size:13,color:'#111827',weight:700},
       polar:{
         bgcolor:'#fff',
         radialaxis:{visible:true, range:[0, radarMax], ticksuffix:'%',
-                    tickfont:{size:10,color:'#9CA3AF'}, gridcolor:'#E5E7EB'},
+                    tickfont:{size:13,color:'#9CA3AF'}, gridcolor:'#E5E7EB'},
         angularaxis:{rotation:90, direction:'clockwise',
-                     tickfont:{family:'Inter',size:10,color:'#374151'},
+                     tickfont:{family:'Inter',size:13,color:'#374151'},
                      gridcolor:'#F1F2F4'}
       },
       showlegend: view.length <= 8,
-      legend:{orientation:'h', y:-0.06, x:0.5, xanchor:'center', font:{size:11}},
+      legend:{orientation:'h', y:-0.06, x:0.5, xanchor:'center', font:{size:13}},
       title:{text: 'SR · ' + splitLabel(split),
-             font:{family:'Fraunces',size:14,color:'#111827',weight:600},
+             font:{family:'Fraunces, serif',size:18,color:'#111827',weight:700},
              x:0.02, xanchor:'left', y:0.99, yanchor:'top'}
     }, {displayModeBar:false, responsive:true});
   }
@@ -1083,7 +1135,7 @@ function init(){
       (combineCluster(g.members, split, it.cat, it.cn)?.sr_std  ?? 0) * 100));
     const tops = meanMat.flatMap((row,gi) => row.map((v,xi) => v + (stdMat[gi][xi]||0)));
     const yMax = Math.max(5, Math.ceil(Math.max(...tops) * 1.18));
-    const pad  = yMax * 0.025;
+    const pad  = yMax * 0.04;
 
     const traces = view.map((g, gi) => ({
       type:'bar', name: g.tag,
@@ -1096,7 +1148,7 @@ function init(){
       hovertemplate:'<b>'+escapeHtml(g.tag)+'</b> · %{customdata} / %{x}<br>SR: %{y:.2f}%<extra></extra>'
     }));
 
-    // Numeric value labels above (mean+std)
+    // Numeric value labels above each bar.
     const annots = [];
     view.forEach((g, gi) => {
       items.forEach((_, xi) => {
@@ -1108,8 +1160,8 @@ function init(){
           xref:'x', yref:'y', text: m.toFixed(1),
           showarrow:false,
           font:{family:'Inter',
-                size: (ngrp>4 || items.length>8) ? 8.5 : 9.5,
-                color:'#111827', weight:600}
+                size: 11,
+                color:'#111827', weight:700}
         });
       });
     });
@@ -1133,7 +1185,7 @@ function init(){
         x: (startX + endX) / 2, y: 1.04,
         xref:'x', yref:'paper', xanchor:'center',
         text: catName(cat), showarrow:false,
-        font:{family:'Inter', size:12, color:'#374151', weight:600}
+        font:{family:'Inter SemiBold, Inter, sans-serif', size:15, color:'#111827', weight:700}
       });
     });
 
@@ -1142,14 +1194,15 @@ function init(){
       bargap:0.22, bargroupgap:0.04,
       height:380, margin:{l:60,r:14,t:54,b: ngrp>8?68:50},
       paper_bgcolor:'#fff', plot_bgcolor:'#fff',
-      xaxis:{tickfont:{size:11,color:'#111827'}, fixedrange:true, tickangle:0,
+      font:{family:'Inter SemiBold, Inter, sans-serif',size:13,color:'#111827',weight:700},
+      xaxis:{tickfont:{size:13,color:'#111827'}, fixedrange:true, tickangle:0,
              ticks:'outside', ticklen:4, tickcolor:'#fff', automargin:true},
       yaxis:{range:[0, yMax], title:{text: splitLabel(split)+' · SR (%)',
-             font:{size:12,color:'#6B7280'}},
+             font:{size:14,color:'#6B7280'}},
              gridcolor:'#F1F2F4', ticksuffix:'%', fixedrange:true,
-             tickfont:{size:11,color:'#6B7280'}, automargin:true},
+             tickfont:{family:'Inter, sans-serif',size:13,color:'#4B5563'}, automargin:true},
       showlegend: view.length <= 8,
-      legend:{orientation:'h', y:-0.18, x:0.5, xanchor:'center', font:{size:11}},
+      legend:{orientation:'h', y:-0.18, x:0.5, xanchor:'center', font:{size:13}},
       annotations: annots, shapes: shapes,
     }, {displayModeBar:false, responsive:true});
   }
@@ -1203,7 +1256,7 @@ function init(){
       const tops = meanMat.flatMap((row,gi) =>
         row.map((v,ci) => v + (stdMat[gi][ci]||0)));
       const yMax = Math.max(5, Math.ceil(Math.max(...tops) * 1.18));
-      const pad  = yMax * 0.025;
+      const pad  = yMax * 0.04;
 
       const traces = view.map((g, gi) => ({
         type:'bar', name: g.tag,
@@ -1212,7 +1265,7 @@ function init(){
         error_y:{type:'data', array: stdMat[gi], color:'#374151', thickness:1, width:4},
         hovertemplate: '<b>'+escapeHtml(g.tag)+'</b> · %{x}<br>SR: %{y:.2f}%<extra></extra>'
       }));
-      // Numeric labels above (mean+std)
+      // Numeric labels above each bar.
       const annots = [];
       view.forEach((g, gi) => {
         clusters.forEach((cn, ci) => {
@@ -1224,8 +1277,8 @@ function init(){
             xref:'x', yref:'y',
             text: m.toFixed(1),
             showarrow:false,
-            font:{family:'Inter', size: (ngrp>4 || clusters.length>8) ? 8.5 : 9.5,
-                  color:'#111827', weight:600}
+            font:{family:'Inter', size: 11,
+                  color:'#111827', weight:700}
           });
         });
       });
@@ -1234,7 +1287,7 @@ function init(){
       annots.push({
         x: 0.5, y: 1.04, xref:'paper', yref:'paper', xanchor:'center',
         text: catName(cat), showarrow:false,
-        font:{family:'Inter', size:12, color:'#374151', weight:600}
+        font:{family:'Inter SemiBold, Inter, sans-serif', size:15, color:'#111827', weight:700}
       });
 
       Plotly.newPlot(id, traces, {
@@ -1243,14 +1296,15 @@ function init(){
         height: longLabels ? 380 : 360,
         margin:{l:60,r:14,t:54,b: longLabels ? 90 : 56},
         paper_bgcolor:'#fff', plot_bgcolor:'#fff',
-        xaxis:{tickfont:{size:11,color:'#111827'},fixedrange:true,
+      font:{family:'Inter SemiBold, Inter, sans-serif',size:13,color:'#111827',weight:700},
+        xaxis:{tickfont:{size:13,color:'#111827'},fixedrange:true,
                tickangle: 0, automargin: true},
         yaxis:{range:[0, yMax], title:{text: splitLabel(split)+' · SR (%)',
-               font:{size:12,color:'#6B7280'}},
+               font:{size:14,color:'#6B7280'}},
                ticksuffix:'%', gridcolor:'#F1F2F4', fixedrange:true,
-               tickfont:{size:11,color:'#6B7280'}, automargin: true},
+               tickfont:{size:13,color:'#6B7280'}, automargin: true},
         showlegend: view.length <= 8,
-        legend:{orientation:'h',y:-0.22,x:0.5,xanchor:'center',font:{size:11}},
+        legend:{orientation:'h',y:-0.22,x:0.5,xanchor:'center',font:{size:13}},
         annotations: annots,
       }, {displayModeBar:false, responsive:true});
     });
@@ -1292,7 +1346,7 @@ function init(){
     const tops    = meanMat.flatMap((row,gi) =>
       row.map((v,di) => v==null ? 0 : (v + (stdMat[gi][di]||0)) * 100));
     const yMax = Math.max(5, Math.ceil(Math.max(...tops) * 1.18));
-    const pad  = yMax * 0.025;
+    const pad  = yMax * 0.04;
 
     const traces = view.map((g, gi) => ({
       type:'bar', name: g.tag,
@@ -1302,87 +1356,141 @@ function init(){
                color:'#374151', thickness:1.2, width:5},
       hovertemplate: '<b>'+escapeHtml(g.tag)+'</b> · %{x}<br>'+label+': %{y:.2f}%<extra></extra>'
     }));
-    // Numeric annotations above (mean+std)
-    const annots = [];
-    view.forEach((g, gi) => {
-      DIMS.forEach((d, di) => {
-        const m = meanMat[gi][di];
-        if (m == null) return;
-        const xCenter = di + (gi - (ngrp-1)/2) * slot;
-        annots.push({
-          x: xCenter, y: (m + (stdMat[gi][di]||0)) * 100 + pad,
-          xref:'x', yref:'y',
-          text: (m*100).toFixed(1),
-          showarrow:false,
-          font:{family:'Inter', size: ngrp>5?9:10, color:'#111827', weight:600}
+
+    function buildVisibleAnnotations(plotDiv){
+      const visible = [];
+      for (let gi = 0; gi < view.length; gi++) {
+        if (!plotDiv || plotDiv.data[gi]?.visible !== 'legendonly') visible.push(gi);
+      }
+      const count = visible.length;
+      if (!count) return [];
+      const visibleSlot = groupWidth / count;
+      const fontSize = 13;
+      const out = [];
+      visible.forEach((gi, activeIndex) => {
+        DIMS.forEach((d, di) => {
+          const m = meanMat[gi][di];
+          if (m == null) return;
+          out.push({
+            x: di + (activeIndex - (count-1)/2) * visibleSlot,
+            y: (m + (stdMat[gi][di]||0)) * 100 + pad,
+            xref:'x', yref:'y', text:(m*100).toFixed(1), showarrow:false,
+            font:{family:'Inter SemiBold, Inter, sans-serif',size:fontSize,color:'#111827',weight:700}
+          });
         });
       });
-    });
+      return out;
+    }
+    const annots = buildVisibleAnnotations(null);
 
     Plotly.react(divId, traces, {
       autosize:true, barmode:'group',
       bargap:0.22, bargroupgap:0.05,
-      height:360, margin:{l:60,r:14,t:34,b:50},
+      height:460, margin:{l:72,r:34,t:105,b:62},
       paper_bgcolor:'#fff', plot_bgcolor:'#fff',
+      font:{family:'Inter SemiBold, Inter, sans-serif',size:13,color:'#111827',weight:700},
       title:{text: label + ' · ' + splitLabel(split),
-             font:{family:'Fraunces',size:14,color:'#111827',weight:600},
+             font:{family:'Fraunces, serif',size:18,color:'#111827',weight:700},
              x:0.02, xanchor:'left', y:0.98, yanchor:'top'},
-      xaxis:{tickfont:{size:12,color:'#111827'},fixedrange:true,tickangle:0, automargin:true},
-      yaxis:{title:{text:label+' (%)',font:{size:12,color:'#6B7280'}},
+      xaxis:{tickfont:{family:'Inter, sans-serif',size:14,color:'#111827'},fixedrange:true,tickangle:0, automargin:true},
+      yaxis:{title:{text:label+' (%)',font:{family:'Inter SemiBold, Inter, sans-serif',size:14,color:'#374151',weight:700}},
              range:[0,yMax],gridcolor:'#F1F2F4',ticksuffix:'%',fixedrange:true,
-             tickfont:{size:11,color:'#6B7280'}, automargin:true},
-      legend:{orientation:'h',y:1.18,x:1,xanchor:'right',font:{size:12}},
+             tickfont:{family:'Inter, sans-serif',size:13,color:'#4B5563'}, automargin:true},
+      legend:{orientation:'h',y:1.20,x:0.5,xanchor:'center',font:{family:'Inter, sans-serif',size:13,color:'#111827'}},
       showlegend: view.length <= 8,
       annotations: annots,
-    }, {displayModeBar:false, responsive:true});
+    }, {displayModeBar:false, responsive:true}).then(plotDiv => {
+      if (plotDiv._genLabelHandler && plotDiv.removeListener) {
+        plotDiv.removeListener('plotly_restyle', plotDiv._genLabelHandler);
+      }
+      plotDiv._genLabelHandler = () => requestAnimationFrame(() => {
+        Plotly.relayout(plotDiv, {annotations: buildVisibleAnnotations(plotDiv)});
+      });
+      plotDiv.on('plotly_restyle', plotDiv._genLabelHandler);
+    });
   }
 
   // ----------- Heatmap ----------------------------------------------------
   function renderHeatmap(view){
     const splits = P.splits;
+    const wantSplits = [splits.includes('test_mini') ? 'test_mini'
+      : splits.includes('val_unseen') ? 'val_unseen' : splits[0]].filter(Boolean);
     const tasks = P.tasks.slice();
     tasks.sort((a,b) => rowSum(b) - rowSum(a));
     function rowSum(t){
       let s = 0;
-      for (const g of view) for (const sp of splits) {
+      for (const g of view) for (const sp of wantSplits) {
         const v = combineTask(g.members, sp, t);
         if (v) s += (v.sr_mean || 0);
       }
       return s;
     }
-    const wantSplits = (view.length * splits.length > 24)
-      ? [splits.includes('test_mini') ? 'test_mini'
-         : splits.includes('val_unseen') ? 'val_unseen' : splits[0]]
-      : splits;
+    const GROUP_SHORT = {
+      'Ours-Pi0':'Ours-π0', 'Ours-Pi0.5':'Ours-π0.5',
+      'Pi0-200k':'π0', 'Pi0.5-200k':'π0.5', 'XVLA-200k':'XVLA',
+      'InternVLA-A1-200k':'IVA1', 'LingBot-VA':'LingBot',
+      'Qwen-RobotManip':'Qwen'
+    };
+    const SPLIT_SHORT = {val_train:'VT', val_unseen:'VU', test_mini:'T', unknown:'?' };
+    const shortGroup = tag => GROUP_SHORT[tag] ||
+      tag.replace(/-200k$/, "").replace(/^Ours-/, "O-").slice(0, 14);
     const cols = [];
     for (const g of view) for (const sp of wantSplits) {
-      cols.push({key: g.tag+'∷'+sp, members: g.members, split: sp,
-                 label: wantSplits.length === 1 ? g.tag : g.tag+' / '+splitLabel(sp)});
+      cols.push({
+        key:g.tag+'∷'+sp, members:g.members, split:sp,
+        label:wantSplits.length === 1 ? shortGroup(g.tag)
+              : shortGroup(g.tag)+'/'+(SPLIT_SHORT[sp] || splitLabel(sp)),
+        fullLabel:g.tag+' / '+splitLabel(sp)
+      });
     }
     const z = tasks.map(t => cols.map(c => {
       const v = combineTask(c.members, c.split, t);
       return v ? v.sr_mean*100 : null;
     }));
+    const xLabels = cols.map(c => c.label);
+    const cellFontSize = 13;
+    const cellAnnots = [];
+    tasks.forEach((task, ti) => cols.forEach((col, ci) => {
+      const value = z[ti][ci];
+      if (value == null) return;
+      cellAnnots.push({
+        x:xLabels[ci], y:task, text:String(Math.round(value)),
+        xref:'x', yref:'y', showarrow:false,
+        font:{family:'Inter SemiBold, Inter, sans-serif',size:cellFontSize,
+              color:value >= 55 ? '#FFFFFF' : '#1F2937'}
+      });
+    }));
+    const separators = [];
+    if (wantSplits.length > 0) {
+      for (let i = wantSplits.length; i < cols.length; i += wantSplits.length) {
+        separators.push({type:'line',xref:'x',yref:'paper',
+          x0:i-0.5,x1:i-0.5,y0:0,y1:1,line:{color:'#9CA3AF',width:1.5}});
+      }
+    }
+    const customdata = tasks.map(() => cols.map(c => c.fullLabel));
     const trace = {
-      type:'heatmap', z, x: cols.map(c=>c.label), y: tasks,
+      type:'heatmap', z, x:xLabels, y:tasks, customdata,
       colorscale: [[0,'#FAFAFA'],[0.2,'#E0E7FF'],[0.4,'#A5B4FC'],[0.6,'#6366F1'],[0.8,'#4338CA'],[1,'#312E81']],
       zmin: 0, zmax: 100,
-      colorbar:{title:'SR %',titleside:'right',thickness:14,len:0.8,tickfont:{size:11}},
-      hovertemplate: '<b>%{y}</b><br>%{x}<br>SR: %{z:.2f}%<extra></extra>'
+      xgap:1, ygap:1,
+      colorbar:{title:'SR %',titleside:'right',thickness:14,len:0.8,tickfont:{size:13}},
+      hovertemplate: '<b>%{y}</b><br>%{customdata}<br>SR: %{z:.2f}%<extra></extra>'
     };
     Plotly.react('heatmap', [trace], {
       autosize:true,
       height: Math.max(440, 22*tasks.length+90),
       margin:{l:200, r:80, t:24, b:120},
       paper_bgcolor:'#fff', plot_bgcolor:'#fff',
+      font:{family:'Inter SemiBold, Inter, sans-serif',size:13,color:'#111827',weight:700},
       title: wantSplits.length === 1
-        ? {text:'Split: '+splitLabel(wantSplits[0])+' (only — '+view.length+' groups × '+splits.length+' splits would overflow)',
-           font:{family:'Inter',size:12,color:'#9CA3AF',style:'italic'},
+        ? {text:'Split: '+splitLabel(wantSplits[0])+' · cell values: SR (%)',
+           font:{family:'Inter',size:14,color:'#9CA3AF',style:'italic'},
            x:0.02,xanchor:'left',y:0.99,yanchor:'top'}
         : undefined,
-      xaxis:{tickfont:{family:'JetBrains Mono',size:11,color:'#111827'},fixedrange:true,tickangle:-30, automargin:true},
-      yaxis:{tickfont:{family:'JetBrains Mono',size:11,color:'#374151'},fixedrange:true,automargin:true,
-             autorange:'reversed'}
+      xaxis:{tickfont:{family:'JetBrains Mono',size:13,color:'#111827'},fixedrange:true,tickangle:-35, automargin:true},
+      yaxis:{tickfont:{family:'JetBrains Mono',size:13,color:'#374151'},fixedrange:true,automargin:true,
+             autorange:'reversed'},
+      annotations:cellAnnots, shapes:separators
     }, {displayModeBar:false, responsive:true});
   }
 
