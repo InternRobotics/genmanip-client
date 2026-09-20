@@ -39,6 +39,49 @@ from typing import Any
 
 _BUNDLED_CLUSTER_MAP = Path(__file__).parent / "default_cluster_map.json"
 _BUNDLED_PAYLOAD     = Path(__file__).parent / "default_payload.json"
+_BUNDLED_EPISODE_DIMENSIONS = Path(__file__).parent / "episode_dimensions_test_mini.json"
+
+
+def _aggregate_generalization(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Group measured episodes using the bundled test_mini metadata labels.
+
+    Episode keys may be zero-padded in metadata and unpadded in results.
+    Unmapped episodes, null labels, other splits and task summaries are excluded.
+    """
+    with _BUNDLED_EPISODE_DIMENSIONS.open(encoding="utf-8") as f:
+        mapping = json.load(f)
+    dimensions = {"Background", "Instruction", "Object", "Mix"}
+    lookup = {}
+    for task_path, episodes in mapping["tasks"].items():
+        task, split = parse_task_name(task_path.rsplit("/", 1)[-1])
+        for episode, dimension in episodes.items():
+            if dimension in dimensions and episode.isascii() and episode.isdecimal():
+                key = (task, split, int(episode))
+                if key in lookup and lookup[key] != dimension:
+                    raise ValueError(f"Conflicting episode dimensions for {key}")
+                lookup[key] = dimension
+
+    grouped = defaultdict(lambda: {"sr": [], "score": []})
+    for record in records:
+        episode = str(record.get("seed", ""))
+        if record["split"] != mapping["scope"] or not (
+            episode.isascii() and episode.isdecimal()
+        ):
+            continue
+        dimension = lookup.get((record["task"], record["split"], int(episode)))
+        if dimension is None:
+            continue
+        values = grouped[(record["run_id"], record["split"], dimension)]
+        for metric in ("sr", "score"):
+            values[metric].append(record[metric])
+
+    out: dict[str, Any] = {}
+    for (run, split, dimension), values in grouped.items():
+        for metric, name in (("sr", "success_rate"), ("score", "score")):
+            out.setdefault(run, {}).setdefault(f"{split}_{name}", {})[dimension] = (
+                _meanstd(values[metric])
+            )
+    return out
 
 
 def load_default_payload() -> dict[str, Any] | None:
@@ -527,6 +570,8 @@ def aggregate(records: list[dict[str, Any]],
           "agg_task": {run -> {split -> {task -> {sr_mean, sr_std, score_mean, score_std, n}}}}
           "agg_cluster": {run -> {split -> {category -> {cluster -> {sr_mean,...}}}}}
                        (only when cluster_map provided)
+          "agg_generalize": {run -> {split_metric -> {dimension -> {mean,std,n}}}}
+                       (matched test_mini episodes only)
         }
     """
     runs: list[str] = []
@@ -582,6 +627,7 @@ def aggregate(records: list[dict[str, Any]],
         "splits": splits_present,
         "agg_top": dict(agg_top),
         "agg_task": {k: dict(v) for k, v in agg_task.items()},
+        "agg_generalize": _aggregate_generalization(records),
     }
 
     if cluster_map:
