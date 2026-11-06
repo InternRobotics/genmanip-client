@@ -19,6 +19,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     eval_parser.add_argument("--port", type=int, default=8087)
     eval_parser.add_argument("--url", type=str, default=None)
     eval_parser.add_argument("--reset", action="store_true")
+    eval_parser.add_argument("--reliable_requests", action="store_true",
+                             help="Enable safe replay (requires a genmanip-replay-v1 server)")
+    eval_parser.add_argument("--request_timeout", type=float, default=10.0,
+                             help="Read/connect timeout per replay request, in seconds")
+    eval_parser.add_argument("--recovery_timeout", type=float, default=60.0,
+                             help="Maximum silence without a valid replay response, in seconds")
     eval_parser.add_argument("-a", "--arm_type", type=str, default="franka")
     eval_parser.add_argument("-g", "--gripper_type", type=str, default="panda_hand")
     eval_parser.add_argument("-c", "--control_type", type=str, default="joint_position")

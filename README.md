@@ -17,6 +17,61 @@ pip install -e ".[full_numpy1]"
 pip install -e ".[full_numpy2]"
 ```
 
+If an offline or restricted package index cannot resolve build requirements,
+use the build tools already installed in your active environment:
+
+```bash
+python -m pip show setuptools wheel  # setuptools >= 68 and wheel are required
+python -m pip install --no-build-isolation -e ".[full_numpy1]"
+# Add --no-index when all runtime dependencies are already installed.
+```
+
+## Reliable evaluation requests (opt-in)
+
+Deploy a server implementing **genmanip-replay-v1** before enabling this mode:
+
+```python
+from genmanip_client import EvalClient
+
+client = EvalClient(
+    base_url="https://your-eval-endpoint",
+    worker_ids=["0"],
+    reliable_requests=True,
+    request_timeout=10.0,
+    recovery_timeout=60.0,
+)
+obs = client.reset()
+# Existing step()/step_chunk() calls do not change.
+```
+
+```bash
+gmp eval --url https://your-eval-endpoint --worker_ids 0 \
+  --reliable_requests --request_timeout 10 --recovery_timeout 60
+```
+
+This covers `step`, `step_chunk`, `reset`, and `reset_result`. Every retry of a
+logical operation sends the same ID and identical payload. A server that is still
+executing returns `pending`; a completed request replays its cached observation.
+The client never retries an action against the legacy endpoints. The default is
+still the legacy behavior, and enabling replay against an unsupported server fails
+before sending a replay operation.
+
+`request_timeout` is the Requests connect/read inactivity timeout for each HTTP
+attempt, not a strict wall-clock deadline. A pending response confirms the server
+is reachable and refreshes the `recovery_timeout` silence budget. The existing
+`step_timeout` / `reset_timeout` limits still bound each logical operation
+(`step_timeout * chunk length` for chunks). Fast gateway errors use a minimum
+one-second retry interval. Exhausting either budget stops the stream: the client
+must explicitly reset before sending new actions. Server restarts, worker
+replacement, and simulation errors also require an explicit reset; replay does
+not restore simulator state after a crash.
+
+Use one sequential EvalClient per worker group. Control calls such as `kill`,
+`create_workers`, and job submission are not automatically retried by this
+transport. After deployment, verify that the gateway forwards both
+`/request_protocol` and `/reliable_request` and preserves binary responses.
+See [the replay protocol](docs/reliable_requests.md) for the server contract.
+
 ## Usage
 
 Primary CLI (recommended):
