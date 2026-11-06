@@ -29,6 +29,8 @@ class Session:
         outcome = next(self.outcomes)
         if isinstance(outcome, Exception):
             raise outcome
+        if isinstance(outcome, requests.Response):
+            return outcome
         envelope = pickle.loads(kwargs["data"])
         result = {k: envelope[k] for k in ("epoch", "stream_id", "sequence")}
         result.update(
@@ -145,3 +147,37 @@ def test_reset_starts_a_new_stream():
     client.post("reset", b"workers", 100)
     assert client.sequence == 1
     assert client.stream_id != old_id
+
+
+@pytest.mark.parametrize(
+    "status,body",
+    [
+        (450, b"Internal Server Error"),
+        (500, b"Internal Server Error"),
+        (502, b"<html>Bad Gateway</html>"),
+        (504, b""),
+        (200, b"<html>Gateway Error</html>"),
+        (200, b""),
+        (200, b'\x80\x05\x95'),
+    ],
+)
+def test_non_json_gateway_errors_and_truncated_responses_are_retried(status, body):
+    gateway_response = requests.Response()
+    gateway_response.status_code = status
+    gateway_response._content = body
+    session = Session([gateway_response, {}])
+    client = transport(session)
+    assert client.post("step_chunk", b"actions", 100).content == b"observation"
+    assert len(session.calls) == 2
+    assert session.calls[0]["data"] == session.calls[1]["data"]
+
+
+def test_non_json_discovery_response_reports_clear_error_before_actions():
+    gateway_response = requests.Response()
+    gateway_response.status_code = 200
+    gateway_response._content = b"<html>Gateway Error</html>"
+    session = Session([])
+    session.get = lambda *args, **kwargs: gateway_response
+    with pytest.raises(RuntimeError, match="Invalid reliable request capability response"):
+        transport(session).post("step_chunk", b"actions", 100)
+    assert session.calls == []
