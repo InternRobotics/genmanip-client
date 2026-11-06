@@ -181,3 +181,21 @@ def test_non_json_discovery_response_reports_clear_error_before_actions():
     with pytest.raises(RuntimeError, match="Invalid reliable request capability response"):
         transport(session).post("step_chunk", b"actions", 100)
     assert session.calls == []
+
+
+def test_eval_client_uses_replay_by_default_without_new_arguments(monkeypatch, tmp_path):
+    pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    pytest.importorskip("filelock")
+    from genmanip_client.eval_client import EvalClient
+
+    monkeypatch.setenv("GENMANIP_RESULT_DIR", str(tmp_path))
+    monkeypatch.setattr(EvalClient, "_health_check", lambda self: None)
+    client = EvalClient("http://example", save_result=False, save_process=False)
+    transport = client._reliable_transport
+    transport.session.close()
+    session = Session([requests.ReadTimeout(), {}])
+    transport.session = session
+    assert client._post_operation("step_chunk", b"actions", 100).content == b"observation"
+    assert session.calls[0]["data"] == session.calls[1]["data"]
+    assert session.calls[0]["timeout"] == 10

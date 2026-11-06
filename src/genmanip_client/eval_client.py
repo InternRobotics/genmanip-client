@@ -619,7 +619,6 @@ class EvalClient:
         token: str | None = None,
         frame_save_interval: int = 0,
         plot_on_episode_end: bool = False,
-        reliable_requests: bool = False,
         request_timeout: float = 10.0,
         recovery_timeout: float = 60.0,
     ):
@@ -664,10 +663,9 @@ class EvalClient:
         if token:
             self._auth_headers = {"Authorization": f"Bearer {token}"}
 
-        self._reliable_transport = (
-            ReliableTransport(self.base_url, self.worker_ids, self._build_headers(),
-                              self._build_params(), request_timeout, recovery_timeout)
-            if reliable_requests else None
+        self._reliable_transport = ReliableTransport(
+            self.base_url, self.worker_ids, self._build_headers(),
+            self._build_params(), request_timeout, recovery_timeout,
         )
 
         # Health check before operations
@@ -742,12 +740,7 @@ class EvalClient:
         return params
 
     def _post_operation(self, operation: str, payload: bytes, timeout: float):
-        if self._reliable_transport is not None:
-            return self._reliable_transport.post(operation, payload, timeout)
-        return requests.post(
-            f"{self.base_url}/{operation}", data=payload,
-            headers=self._build_headers({"Content-Type": "application/octet-stream"}),
-            params=self._build_params(), timeout=timeout)
+        return self._reliable_transport.post(operation, payload, timeout)
 
     def _extract_error_detail(self, resp: requests.Response):
         try:
@@ -761,8 +754,7 @@ class EvalClient:
         try:
             self.kill_workers()
         finally:
-            if self._reliable_transport is not None:
-                self._reliable_transport.close()
+            self._reliable_transport.close()
         print()
         print_success(f"Client closed.")
 
@@ -820,16 +812,8 @@ class EvalClient:
             )
 
     def reset(self):
-        try:
-            self.kill_workers()
-        except RuntimeError as exc:
-            if self._reliable_transport is not None:
-                raise
-            # Reset can still recreate missing workers, so stale-worker cleanup is best-effort.
-            print_warning(f"Pre-reset kill failed: {exc}")
-
-        if self._reliable_transport is not None:
-            self._reliable_transport.new_stream()
+        self.kill_workers()
+        self._reliable_transport.new_stream()
 
         payload = pickle.dumps(
             {"worker_ids": self.worker_ids}, protocol=pickle.HIGHEST_PROTOCOL
@@ -1324,9 +1308,6 @@ def run_cli(args: argparse.Namespace) -> int:
         run_id=getattr(args, "run_id", "") or "",
         frame_save_interval=getattr(args, "frame_save_interval", 0),
         plot_on_episode_end=getattr(args, "plot_on_episode_end", False),
-        reliable_requests=getattr(args, "reliable_requests", False),
-        request_timeout=getattr(args, "request_timeout", 10.0),
-        recovery_timeout=getattr(args, "recovery_timeout", 60.0),
     )
     chunk_size = int(getattr(args, "chunk_size", 1))
     if chunk_size < 1:

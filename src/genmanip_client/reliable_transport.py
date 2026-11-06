@@ -1,4 +1,4 @@
-"""Opt-in ordered replay transport; requires genmanip-replay-v1 on the server."""
+"""Ordered replay transport; requires genmanip-replay-v1 on the server."""
 
 import logging
 import math
