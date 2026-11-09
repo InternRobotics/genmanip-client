@@ -21,7 +21,7 @@ class ReliableTransport:
         headers,
         params,
         request_timeout=10.0,
-        recovery_timeout=60.0,
+        recovery_timeout=600.0,
         session=None,
     ):
         if any(
