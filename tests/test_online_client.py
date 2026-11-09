@@ -1,6 +1,6 @@
 import pytest
 
-from genmanip_client.online_client import OnlineEvaluationClient
+from genmanip_client.extensions.online_client import OnlineEvaluationClient
 
 
 class FakeResponse:
@@ -20,11 +20,12 @@ class FakeSession:
         self._responses = list(responses)
         self.calls = []
 
-    def post(self, url, json=None, headers=None, timeout=None):
+    def post(self, url, json=None, headers=None, timeout=None, params=None):
         self.calls.append(
             {
                 "url": url,
                 "json": json,
+                "params": params,
                 "headers": headers,
                 "timeout": timeout,
             }
@@ -92,7 +93,7 @@ def test_wait_until_ready_polls(monkeypatch):
         ]
     )
     monkeypatch.setattr(
-        "genmanip_client.online_client.time.sleep",
+        "genmanip_client.extensions.online_client.time.sleep",
         lambda _: None,
     )
     client = OnlineEvaluationClient(
