@@ -13,6 +13,16 @@ logger = logging.getLogger(__name__)
 PROTOCOL = "genmanip-replay-v1"
 
 
+def _http_error_detail(response):
+    # Allowlist response metadata; never dump request headers or cookies.
+    allowed = {"server", "via", "content-type", "content-length", "retry-after",
+               "x-request-id", "x-correlation-id", "traceparent", "cf-ray",
+               "x-envoy-upstream-service-time", "x-amzn-trace-id"}
+    headers = {k: v for k, v in response.headers.items() if k.lower() in allowed}
+    body = repr(response.text[:200]) if response.content else "<empty>"
+    return f"HTTP {response.status_code}; headers={headers!r}; body={body}"
+
+
 class ReliableTransport:
     def __init__(
         self,
@@ -101,6 +111,7 @@ class ReliableTransport:
             deadline = time.monotonic() + timeout
             last_contact = time.monotonic()
             attempts = 0
+            last_error = None
             try:
                 while True:
                     now = time.monotonic()
@@ -110,8 +121,8 @@ class ReliableTransport:
                     if remaining <= 0:
                         raise RuntimeError(
                             f"Reliable request {request_id} exceeded its operation or network recovery deadline; "
-                            "execution may have completed on the server"
-                        )
+                            f"execution may have completed on the server; last_error={last_error}"
+                        ) from last_error
                     attempts += 1
                     started = time.monotonic()
                     try:
@@ -125,13 +136,13 @@ class ReliableTransport:
                             params=self.params,
                             timeout=min(self.request_timeout, remaining),
                         )
-                        if response.status_code in (408, 429, 450, 500, 502, 503, 504):
+                        if response.status_code in (403, 408, 429, 450, 500, 502, 503, 504):
                             raise requests.ConnectionError(
-                                f"Transient HTTP {response.status_code}: {response.text[:200]}"
+                                f"Retryable {_http_error_detail(response)}"
                             )
                         if response.status_code not in (200, 202):
                             raise RuntimeError(
-                                f"Reliable request HTTP {response.status_code}: {response.text[:200]}"
+                                f"Reliable request {_http_error_detail(response)}"
                             )
                         try:
                             result = pickle.loads(response.content)
@@ -193,11 +204,13 @@ class ReliableTransport:
                         requests.ConnectionError,
                         requests.exceptions.ChunkedEncodingError,
                     ) as exc:
+                        last_error = exc
                         logger.warning(
-                            "Retrying reliable request id=%s operation=%s attempt=%s: %s",
+                            "Retrying reliable request id=%s operation=%s attempt=%s workers=%s: %s",
                             request_id,
                             operation,
                             attempts,
+                            self.worker_ids,
                             exc,
                         )
                     # Avoid a tight retry loop on a fast proxy error or immediate pending.
